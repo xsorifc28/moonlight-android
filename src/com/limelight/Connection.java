@@ -46,8 +46,8 @@ public class Connection extends Activity {
 		Log.v("NvmDNS", "onCreate");
 		
 			
-		NvmDNS dns = new NvmDNS();
-		dns.execute();
+		//NvmDNS dns = new NvmDNS();
+		//dns.execute();
 		
 		
 		setContentView(R.layout.activity_connection);

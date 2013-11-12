@@ -10,8 +10,10 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import org.xbill.DNS.DClass;
 import org.xbill.DNS.Header;
@@ -23,6 +25,10 @@ import org.xbill.DNS.TXTRecord;
 import org.xbill.DNS.TextParseException;
 import org.xbill.DNS.Type;
 
+import com.limelight.ComputerList.ComputerListAdapter;
+import com.limelight.nvstream.av.AvRtpPacket;
+
+import android.app.Activity;
 import android.os.AsyncTask;
 import android.util.Log;
 
@@ -35,8 +41,12 @@ public class NvmDNS extends AsyncTask<Void, Integer, Void> {
 
 	public static final int WAIT_MS = 1000;
 
-	private HashSet<NvComputer> responses;
+	//private HashSet<NvComputer> responses;
+	//private LinkedList<NvComputer> responses;
 	private MulticastSocket socket;
+	
+	
+	private LinkedBlockingQueue<DatagramPacket> packets = new LinkedBlockingQueue<DatagramPacket>();
 
 	static {
 		try {
@@ -46,8 +56,14 @@ public class NvmDNS extends AsyncTask<Void, Integer, Void> {
 		}
 	}
 
-	public NvmDNS() {
-		this.responses = new HashSet<NvComputer>();
+	private Activity parent;
+	private ComputerListAdapter adapter;
+	
+	public NvmDNS(Activity activity, LinkedList<NvComputer> computerList, ComputerListAdapter adapter) {
+		this.adapter = adapter;
+		this.parent = activity;
+		//this.responses = new HashSet<NvComputer>();
+		//this.responses = computerList;
 
 		// Create our Socket Connection
 		try {
@@ -59,83 +75,128 @@ public class NvmDNS extends AsyncTask<Void, Integer, Void> {
 			Log.e("NvmDNS Socket Constructor", "There was an error creating the DNS socket.");
 			Log.e("NvmDNS Socket Constructor", e.getMessage());
 		}
+		
 	}
 
 	public Set<NvComputer> getComputers() {
-		return Collections.unmodifiableSet(this.responses);
+		//return Collections.unmodifiableSet(this.responses);
+		return null;
 	}
 
-	private void sendQuery() {
-		Header queryHeader = new Header();
-
-		// If we set the RA (Recursion Available) flag and our message ID to 0
-		// then the packet matches the real mDNS query packet as displayed in Wireshark 
-		queryHeader.setFlag(org.xbill.DNS.Flags.RA);
-		queryHeader.setID(0);
-
-		Record question = null;
-		try {
-			// We need to create our "Question" DNS query that is a pointer record to
-			// the mDNS Query "Name"
-			question = Record.newRecord(new Name(NvmDNS.MDNS_QUERY), Type.PTR, DClass.IN);
-		} catch (TextParseException e) {
-			Log.e("NvmDNS Query", e.getMessage());
-			return;
-		}
-
-		// We combine our header and our question into a single message
-		Message query = new Message();
-		query.setHeader(queryHeader);
-		query.addRecord(question, Section.QUESTION);
-
-		// Convert the message into Network Byte Order
-		byte[] wireQuery = query.toWire();
-		Log.i("NvmDNS Query", query.toString());
-
-		// Convert our byte array into a Packet
-		DatagramPacket transmitPacket = new DatagramPacket(wireQuery, wireQuery.length);
-		transmitPacket.setAddress(NvmDNS.MDNS_MULTICAST_ADDRESS);
-		transmitPacket.setPort(NvmDNS.MDNS_PORT);
-
-		// And (attempt) to send the packet
-		try {
-			Log.d("NvmDNS Query", "Blocking on this.nvstream_socket.send(transmitPacket)");
-			this.socket.send(transmitPacket);
-			Log.d("NvmDNS Query", "Passed this.nvstream_socket.send(transmitPacket)");
-		} catch (IOException e) {
-			Log.e("NvmDNS Query", "There was an error sending the DNS query.");
-			Log.e("NvmDNS Query", e.getMessage());
-		}
+	public void sendQuery() {
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				Header queryHeader = new Header();
+		
+				// If we set the RA (Recursion Available) flag and our message ID to 0
+				// then the packet matches the real mDNS query packet as displayed in Wireshark 
+				queryHeader.setFlag(org.xbill.DNS.Flags.RA);
+				queryHeader.setID(0);
+		
+				Record question = null;
+				try {
+					// We need to create our "Question" DNS query that is a pointer record to
+					// the mDNS Query "Name"
+					question = Record.newRecord(new Name(NvmDNS.MDNS_QUERY), Type.PTR, DClass.IN);
+				} catch (TextParseException e) {
+					Log.e("NvmDNS Query", e.getMessage());
+					return;
+				}
+		
+				// We combine our header and our question into a single message
+				Message query = new Message();
+				query.setHeader(queryHeader);
+				query.addRecord(question, Section.QUESTION);
+		
+				// Convert the message into Network Byte Order
+				byte[] wireQuery = query.toWire();
+				Log.i("NvmDNS Query", query.toString());
+		
+				// Convert our byte array into a Packet
+				DatagramPacket transmitPacket = new DatagramPacket(wireQuery, wireQuery.length);
+				transmitPacket.setAddress(NvmDNS.MDNS_MULTICAST_ADDRESS);
+				transmitPacket.setPort(NvmDNS.MDNS_PORT);
+		
+				// And (attempt) to send the packet
+				try {
+					Log.d("NvmDNS Query", "Blocking on this.nvstream_socket.send(transmitPacket)");
+					NvmDNS.this.socket.send(transmitPacket);
+					Log.d("NvmDNS Query", "Passed this.nvstream_socket.send(transmitPacket)");
+				} catch (IOException e) {
+					Log.e("NvmDNS Query", "There was an error sending the DNS query.");
+					Log.e("NvmDNS Query", e.getMessage());
+				}
+			}
+		}).start();
 	}
 
 	public void waitForResponses() {
-		Log.v("NvmDNS Response", "mDNS Loop Started");
-
-		// We support up to 1500 byte packets
-		byte[] data = new byte[1500];
-		DatagramPacket packet = new DatagramPacket(data, data.length);
-
-		Message message = null;
-
-		while (!this.socket.isClosed()) {
-			// Attempt to receive a packet/response
-			try {
-				Log.d("NvmDNS Response", "Blocking on this.nvstream_query_socket.recieve()");
-				this.socket.receive(packet);
-				Log.d("NvmDNS Response", "Blocking passed on this.nvstream_query_socket.recieve()");
-				message = new Message(packet.getData());
-				this.parseRecord(message, packet.getAddress());
-			} catch (IOException e) {
-				if (this.socket.isClosed()) {
-					Log.e("NvmDNS Response", "The socket was closed on us. The timer must have been reached.");
-					return;
-				} else {
-					Log.e("NvmDNS Response", "There was an error receiving the response.");
-					Log.e("NvmDNS Response", e.getMessage());
-					continue;
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				Log.v("NvmDNS Response", "mDNS Loop Started");
+		
+				// We support up to 1500 byte packets
+				
+				
+		
+				Message message = null;
+		
+				while (!NvmDNS.this.socket.isClosed()) {
+					// Attempt to receive a packet/response
+					try {
+						Log.d("NvmDNS Response", "Blocking on this.nvstream_query_socket.recieve()");
+						byte[] data = new byte[1500];
+						DatagramPacket packet = new DatagramPacket(data, data.length);
+						NvmDNS.this.socket.receive(packet);
+						
+						NvmDNS.this.packets.add(packet);
+						
+						
+						Log.d("NvmDNS Response", "Blocking passed on this.nvstream_query_socket.recieve()");
+						//message = new Message(packet.getData());
+						//NvmDNS.this.parseRecord(message, packet.getAddress());
+					} catch (IOException e) {
+						if (NvmDNS.this.socket.isClosed()) {
+							Log.e("NvmDNS Response", "The socket was closed on us. The timer must have been reached.");
+							return;
+						} else {
+							Log.e("NvmDNS Response", "There was an error receiving the response.");
+							Log.e("NvmDNS Response", e.getMessage());
+							continue;
+						}
+					}
+				}	
+			}
+		}).start();
+		
+		
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				while(true) {
+					DatagramPacket packet = null;
+					try {
+						 packet = NvmDNS.this.packets.take();
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+						return;
+					}
+					
+					Message message = null;
+					try {
+						message = new Message(packet.getData());
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					NvmDNS.this.parseRecord(message, packet.getAddress());
+					
 				}
 			}
-		}		
+		}).start();
 	}
 
 	private void parseRecord(Message message, InetAddress address) {
@@ -203,8 +264,22 @@ public class NvmDNS extends AsyncTask<Void, Integer, Void> {
 			// We need to resolve the hostname in this thread so that we can use it in the GUI
 			address.getCanonicalHostName();
 
-			NvComputer computer = new NvComputer(hostname, address, serviceState, numberOfApps, gpuType, mac, uniqueID);
-			this.responses.add(computer);
+			final NvComputer computer = new NvComputer(hostname, address, serviceState, numberOfApps, gpuType, mac, uniqueID);
+			
+			//this.responses.add(computer);
+			
+			
+			
+			this.parent.runOnUiThread(new Runnable() {
+			     public void run() {
+			    	 NvmDNS.this.adapter.add(computer);
+			    	 
+						
+			//stuff that updates ui
+			    	 NvmDNS.this.adapter.notifyDataSetChanged();
+			    }
+			});
+			
 		} catch (ArrayIndexOutOfBoundsException e) {
 			Log.e("NvmDNS Response", "We recieved a malformed DNS repsonse.");
 		}
@@ -275,8 +350,5 @@ public class NvmDNS extends AsyncTask<Void, Integer, Void> {
 	@Override
 	protected void onPostExecute(Void moreUselessParameters) {
 		Log.v("NvmDNS ASync", "onPostExecute");
-		for (NvComputer computer : this.responses) {
-			Log.i("NvmDNS NvComputer", computer.toString());
-		}
 	}
 }
