@@ -4,6 +4,7 @@ import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.input.NvControllerPacket;
 
 import android.app.Activity;
+import android.app.Service;
 import android.content.ComponentCallbacks2;
 import android.os.Bundle;
 import android.view.InputDevice;
@@ -15,6 +16,7 @@ import android.view.View.OnGenericMotionListener;
 import android.view.View.OnTouchListener;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
 
 
 public class Game extends Activity implements OnGenericMotionListener, OnTouchListener {
@@ -280,7 +282,12 @@ public class Game extends Activity implements OnGenericMotionListener, OnTouchLi
 	
 	@Override
 	public boolean onTouchEvent(MotionEvent event) {
-		if ((event.getSource() & InputDevice.SOURCE_CLASS_POINTER) != 0)
+		if (event.getPointerCount() == 2) 
+		{
+			InputMethodManager imm = (InputMethodManager)this.getSystemService(Service.INPUT_METHOD_SERVICE);
+			imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, InputMethodManager.HIDE_IMPLICIT_ONLY);
+		} 
+		else if ((event.getSource() & InputDevice.SOURCE_CLASS_POINTER) != 0)
 		{
 			// This case is for touch-based input devices
 			if (event.getSource() == InputDevice.SOURCE_TOUCHSCREEN ||
@@ -326,7 +333,6 @@ public class Game extends Activity implements OnGenericMotionListener, OnTouchLi
 
 			return true;
 		}
-		
 		return super.onTouchEvent(event);
 	}
 	
