@@ -16,6 +16,13 @@ public class AvByteBufferPool {
 		this.bufferList = new LinkedList<byte[]>();
 	}
 	
+	public void preallocate(int buffers)
+	{
+		for (int i = 0; i < buffers; i++) {
+			free(new byte[bufferSize]);
+		}
+	}
+	
 	public synchronized byte[] allocate()
 	{
 		if (bufferList.isEmpty())

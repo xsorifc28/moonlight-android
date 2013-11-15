@@ -17,12 +17,13 @@ public class AvVideoDepacketizer {
 	private int avcNalDataLength = 0;
 	private int currentlyDecoding;
 	
-	// Sequencing state
-	private short lastSequenceNumber;
-	
 	private LinkedBlockingQueue<AvDecodeUnit> decodedUnits = new LinkedBlockingQueue<AvDecodeUnit>();
 	
 	private AvByteBufferPool pool = new AvByteBufferPool(1500);
+	
+	public AvVideoDepacketizer() {
+		pool.preallocate(1000);
+	}
 	
 	public byte[] allocatePacketBuffer()
 	{
@@ -225,21 +226,13 @@ public class AvVideoDepacketizer {
 	
 	public void addInputData(AvRtpPacket packet)
 	{
-		short seq = packet.getSequenceNumber();
-		
-		// Toss out the current NAL if we receive a packet that is
-		// out of sequence
-		if (lastSequenceNumber != 0 &&
-			(short)(lastSequenceNumber + 1) != seq)
-		{
-			System.out.println("Received OOS video data (expected "+(lastSequenceNumber + 1)+", got "+seq+")");
-			
+		// Handle a packet loss indication
+		if (packet == null) {
 			// Reset the depacketizer state
 			currentlyDecoding = AvDecodeUnit.TYPE_UNKNOWN;
 			clearAvcNalState();
+			return;
 		}
-		
-		lastSequenceNumber = seq;
 		
 		// Pass the payload to the non-sequencing parser
 		AvByteBufferDescriptor rtpPayload = packet.getNewPayloadDescriptor();

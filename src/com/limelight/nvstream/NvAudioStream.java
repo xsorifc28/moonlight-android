@@ -5,13 +5,13 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.SocketException;
 import java.util.LinkedList;
-import java.util.concurrent.LinkedBlockingQueue;
 
 import jlibrtp.Participant;
 import jlibrtp.RTPSession;
 
 import com.limelight.nvstream.av.AvByteBufferDescriptor;
 import com.limelight.nvstream.av.AvByteBufferPool;
+import com.limelight.nvstream.av.AvRtpOrderedQueue;
 import com.limelight.nvstream.av.AvRtpPacket;
 import com.limelight.nvstream.av.AvShortBufferDescriptor;
 import com.limelight.nvstream.av.audio.AvAudioDepacketizer;
@@ -25,7 +25,8 @@ public class NvAudioStream {
 	public static final int RTP_PORT = 48000;
 	public static final int RTCP_PORT = 47999;
 	
-	private LinkedBlockingQueue<AvRtpPacket> packets = new LinkedBlockingQueue<AvRtpPacket>();
+	// Audio is RTP packet type 97
+	private AvRtpOrderedQueue packets = new AvRtpOrderedQueue((byte)97);
 	
 	private AudioTrack track;
 	
@@ -106,6 +107,8 @@ public class NvAudioStream {
 	{
 		rtp = new DatagramSocket(RTP_PORT);
 		
+		rtp.setReceiveBufferSize(1024*512);
+		
 		session = new RTPSession(rtp, null);
 		session.addParticipant(new Participant(host, RTP_PORT, 0));
 	}
@@ -159,12 +162,13 @@ public class NvAudioStream {
 		Thread t = new Thread() {
 			@Override
 			public void run() {
+				AvRtpPacket packet;
+				
 				while (!isInterrupted())
 				{
-					AvRtpPacket packet;
-					
 					try {
-						packet = packets.take();
+						// Blocks for a maximum of 50ms
+						packet = packets.removeNext(50);
 					} catch (InterruptedException e) {
 						abort();
 						return;
@@ -172,7 +176,9 @@ public class NvAudioStream {
 					
 					depacketizer.decodeInputData(packet);
 					
-					pool.free(packet.getBackingBuffer());
+					if (packet != null) {
+						pool.free(packet.getBackingBuffer());
+					}
 				}
 			}
 		};
@@ -230,7 +236,7 @@ public class NvAudioStream {
 					desc.data = packet.getData();
 					
 					// Give the packet to the depacketizer thread
-					packets.add(new AvRtpPacket(desc));
+					packets.addPacket(new AvRtpPacket(desc));
 					
 					// Get a new buffer from the buffer pool
 					packet.setData(pool.allocate(), 0, 1500);

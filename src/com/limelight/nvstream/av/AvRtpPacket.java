@@ -2,7 +2,7 @@ package com.limelight.nvstream.av;
 
 import java.nio.ByteBuffer;
 
-public class AvRtpPacket {
+public class AvRtpPacket implements Comparable<AvRtpPacket> {
 	
 	private byte packetType;
 	private short seqNum;
@@ -24,6 +24,16 @@ public class AvRtpPacket {
 		seqNum = bb.getShort();
 	}
 	
+	public int getUnsignedSequenceNumber()
+	{
+		if (seqNum < 0) {
+			return seqNum + 65536;
+		}
+		else {
+			return seqNum;
+		}
+	}
+	
 	public byte getPacketType()
 	{
 		return packetType;
@@ -42,5 +52,11 @@ public class AvRtpPacket {
 	public AvByteBufferDescriptor getNewPayloadDescriptor()
 	{
 		return new AvByteBufferDescriptor(buffer.data, buffer.offset+12, buffer.length-12);
+	}
+
+	@Override
+	public int compareTo(AvRtpPacket another) {
+		return this.getUnsignedSequenceNumber() -
+				another.getUnsignedSequenceNumber();
 	}
 }

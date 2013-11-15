@@ -72,7 +72,7 @@ public class NvConnection {
 			NetworkInterface iface = ifaceList.nextElement();
 
 			if (iface.getHardwareAddress() != null) {
-			selectedIface = ifaceList.nextElement();
+				selectedIface = ifaceList.nextElement();
 				break;
 			}
 		}
@@ -137,12 +137,14 @@ public class NvConnection {
 				try {
 					startSteamBigPicture();
 					performHandshake();
-					videoStream.startVideoStream(host, video);
+					videoStream.readyVideoStream(host, video);
 					audioStream.startAudioStream(host);
 					beginControlStream();
 					controlStream.startJitterPackets();
 					startController();
 					activity.hideSystemUi();
+					videoStream.beginVideoStream(host);
+					warnDecoder();
 				} catch (XmlPullParserException e) {
 					e.printStackTrace();
 					displayToast(e.getMessage());
@@ -160,6 +162,12 @@ public class NvConnection {
 		ConnectivityManager mgr = (ConnectivityManager) activity.getSystemService(Context.CONNECTIVITY_SERVICE);
 		if (mgr.isActiveNetworkMetered()) {
 			displayToast("Warning: Your active network connection is metered!");
+		}
+	}
+	
+	private void warnDecoder() {
+		if (videoStream.isVideoOff()) {
+			displayToast("H264 high profile decoding is unavailable. Video will be disabled.");
 		}
 	}
 	

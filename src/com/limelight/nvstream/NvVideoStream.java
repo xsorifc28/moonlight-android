@@ -8,10 +8,10 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.util.LinkedList;
-import java.util.concurrent.LinkedBlockingQueue;
 
 import com.limelight.nvstream.av.AvByteBufferDescriptor;
 import com.limelight.nvstream.av.AvDecodeUnit;
+import com.limelight.nvstream.av.AvRtpOrderedQueue;
 import com.limelight.nvstream.av.AvRtpPacket;
 import com.limelight.nvstream.av.video.AvVideoDepacketizer;
 import com.limelight.nvstream.av.video.AvVideoPacket;
@@ -21,6 +21,8 @@ import jlibrtp.RTPSession;
 
 import android.media.MediaCodec;
 import android.media.MediaCodec.BufferInfo;
+import android.media.MediaCodecInfo;
+import android.media.MediaCodecList;
 import android.media.MediaFormat;
 import android.view.Surface;
 
@@ -28,16 +30,24 @@ public class NvVideoStream {
 	public static final int RTP_PORT = 47998;
 	public static final int RTCP_PORT = 47999;
 	public static final int FIRST_FRAME_PORT = 47996;
+	public static final String[] blacklistedDecoders = new String[]
+		{
+		"OMX.google", // Android software decoder
+		"OMX.TI.DUCATI1" // TI Ducati hardware decoder
+		};
+	
 	
 	private ByteBuffer[] videoDecoderInputBuffers;
 	private MediaCodec videoDecoder;
 	
-	private LinkedBlockingQueue<AvRtpPacket> packets = new LinkedBlockingQueue<AvRtpPacket>();
+	// Video is RTP packet type 96
+	private AvRtpOrderedQueue packets = new AvRtpOrderedQueue((byte)96);
 	
 	private RTPSession session;
 	private DatagramSocket rtp, rtcp;
 	private Socket firstFrameSocket;
 
+	private boolean videoOff = false;
 	
 	private LinkedList<Thread> threads = new LinkedList<Thread>();
 
@@ -88,6 +98,11 @@ public class NvVideoStream {
 		threads.clear();
 	}
 	
+	public boolean isVideoOff()
+	{
+		return videoOff;
+	}
+	
 	public void trim()
 	{
 		depacketizer.trim();
@@ -127,29 +142,84 @@ public class NvVideoStream {
 		rtp = new DatagramSocket(RTP_PORT);
 		rtcp = new DatagramSocket(RTCP_PORT);
 		
-		rtp.setReceiveBufferSize(2097152);
-		System.out.println("RECV BUF: "+rtp.getReceiveBufferSize());
-		System.out.println("SEND BUF: "+rtp.getSendBufferSize());
+		rtp.setReceiveBufferSize(1024*1024*16);
+		System.out.println("RECV: "+rtp.getReceiveBufferSize());
 		
 		session = new RTPSession(rtp, rtcp);
 		session.addParticipant(new Participant(host, RTP_PORT, RTCP_PORT));
 	}
 	
+	private MediaCodecInfo findAvcHighProfileCodec()
+	{
+		// Find a suitable hardware decoder
+		for (int i = 0; i < MediaCodecList.getCodecCount(); i++) {
+			MediaCodecInfo mci = MediaCodecList.getCodecInfoAt(i);
+			
+			// We need a decoder
+			if (mci.isEncoder()) {
+				mci = null;
+				continue;
+			}
+			
+			// Make sure this isn't blacklisted
+			for (String badCodec : blacklistedDecoders) {
+				if (mci.getName().startsWith(badCodec)) {
+					mci = null;
+					break;
+				}
+			}
+			
+			if (mci != null) {
+				// It needs to decode what we want
+				for (String type : mci.getSupportedTypes()) {
+					if (type.equals("video/avc")) {
+						return mci;
+					}
+				}
+			}
+		}
+		
+		return null;
+	}
+	
 	public void setupDecoders(Surface surface)
 	{
-		videoDecoder = MediaCodec.createDecoderByType("video/avc");
-		MediaFormat videoFormat = MediaFormat.createVideoFormat("video/avc", 1280, 720);
-
-		videoDecoder.configure(videoFormat, surface, null, 0);
-
-		videoDecoder.setVideoScalingMode(MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT);
+		MediaCodecInfo mci = findAvcHighProfileCodec();
 		
+		// Check if a good video codec was found
+		if (mci == null) {
+			videoOff = true;
+			return;
+		}
+		else {
+			System.out.println("Selected decoder: "+mci.getName());
+		}
+		
+		MediaFormat videoFormat = MediaFormat.createVideoFormat("video/avc", 1280, 720);
+		videoDecoder = MediaCodec.createByCodecName(mci.getName());
+		videoDecoder.configure(videoFormat, surface, null, 0);
+		videoDecoder.setVideoScalingMode(MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT);
 		videoDecoder.start();
-
 		videoDecoderInputBuffers = videoDecoder.getInputBuffers();
 	}
+	
+	public void beginVideoStream(final String host)
+	{
+		new Thread() {
+			@Override
+			public void run() {
+				// Read the first frame to start the UDP video stream
+				try {
+					readFirstFrame(host);
+				} catch (IOException e2) {
+					abort();
+					return;
+				}
+			}
+		}.start();
+	}
 
-	public void startVideoStream(final String host, final Surface surface)
+	public void readyVideoStream(final String host, final Surface surface)
 	{
 		// This thread becomes the output display thread
 		Thread t = new Thread() {
@@ -158,39 +228,33 @@ public class NvVideoStream {
 				// Setup the decoder context
 				setupDecoders(surface);
 				
-				// Open RTP sockets and start session
-				try {
-					setupRtpSession(host);
-				} catch (SocketException e1) {
-					e1.printStackTrace();
-					return;
+				if (!videoOff) {
+					// Open RTP sockets and start session
+					try {
+						setupRtpSession(host);
+					} catch (SocketException e1) {
+						e1.printStackTrace();
+						return;
+					}
+
+					// Start pinging before reading the first frame
+					// so Shield Proxy knows we're here and sends us
+					// the reference frame
+					startUdpPingThread();
+					
+					// Start the receive thread early to avoid missing
+					// early packets
+					startReceiveThread();
+					
+					// Start the depacketizer thread to deal with the RTP data
+					startDepacketizerThread();
+					
+					// Start decoding the data we're receiving
+					startDecoderThread();
+					
+					// Render the frames that are coming out of the decoder
+					outputDisplayLoop(this);	
 				}
-				
-				// Start pinging before reading the first frame
-				// so Shield Proxy knows we're here and sends us
-				// the reference frame
-				startUdpPingThread();
-				
-				// Read the first frame to start the UDP video stream
-				try {
-					readFirstFrame(host);
-				} catch (IOException e2) {
-					abort();
-					return;
-				}
-				
-				// Start the receive thread early to avoid missing
-				// early packets
-				startReceiveThread();
-				
-				// Start the depacketizer thread to deal with the RTP data
-				startDepacketizerThread();
-				
-				// Start decoding the data we're receiving
-				startDecoderThread();
-				
-				// Render the frames that are coming out of the decoder
-				outputDisplayLoop(this);
 			}
 		};
 		threads.add(t);
@@ -268,12 +332,13 @@ public class NvVideoStream {
 		Thread t = new Thread() {
 			@Override
 			public void run() {
+				AvRtpPacket packet;
+				
 				while (!isInterrupted())
 				{
-					AvRtpPacket packet;
-					
 					try {
-						packet = packets.take();
+						// Blocks for a maximum of 50ms
+						packet = packets.removeNext(50);
 					} catch (InterruptedException e) {
 						abort();
 						return;
@@ -311,7 +376,7 @@ public class NvVideoStream {
 					desc.data = packet.getData();
 					
 					// Give the packet to the depacketizer thread
-					packets.add(new AvRtpPacket(desc));
+					packets.addPacket(new AvRtpPacket(desc));
 					
 					// Get a new buffer from the buffer pool
 					packet.setData(depacketizer.allocatePacketBuffer(), 0, 1500);

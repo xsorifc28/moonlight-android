@@ -12,10 +12,7 @@ public class AvAudioDepacketizer {
 			new LinkedBlockingQueue<AvShortBufferDescriptor>(15);
 	
 	private AvShortBufferPool pool = new AvShortBufferPool(OpusDecoder.getMaxOutputShorts());
-	
-	// Sequencing state
-	private short lastSequenceNumber;
-	
+
 	public void trim()
 	{
 		pool.purge();
@@ -38,30 +35,17 @@ public class AvAudioDepacketizer {
 			}
 		}
 		else {
-			System.out.println("decode failed: "+decodeLen);
 			pool.free(pcmData);
 		}
 	}
 	
 	public void decodeInputData(AvRtpPacket packet)
 	{
-		short seq = packet.getSequenceNumber();
-		
-		if (packet.getPacketType() != 97) {
-			// Only type 97 is audio
+		// If the packet is null, this indicates a packet loss
+		if (packet == null) {
+			decodeData(null, 0, 0);
 			return;
 		}
-		
-		// Toss out the current NAL if we receive a packet that is
-		// out of sequence
-		if (lastSequenceNumber != 0 &&
-			(short)(lastSequenceNumber + 1) != seq)
-		{
-			System.out.println("Received OOS audio data (expected "+(lastSequenceNumber + 1)+", got "+seq+")");
-			decodeData(null, 0, 0);
-		}
-		
-		lastSequenceNumber = seq;
 		
 		// This is all the depacketizing we need to do
 		AvByteBufferDescriptor rtpPayload = packet.getNewPayloadDescriptor();
