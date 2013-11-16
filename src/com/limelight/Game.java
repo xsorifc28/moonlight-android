@@ -1,21 +1,16 @@
 package com.limelight;
 
 import com.limelight.nvstream.NvConnection;
-import com.limelight.nvstream.input.NvControllerPacket;
 
 import android.app.Activity;
 import android.app.Service;
 import android.content.ComponentCallbacks2;
 import android.os.Bundle;
 import android.view.GestureDetector;
-import android.view.GestureDetector.OnGestureListener;
-import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.SurfaceView;
 import android.view.View;
-import android.view.View.OnGenericMotionListener;
-import android.view.View.OnTouchListener;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
@@ -24,7 +19,6 @@ import android.view.inputmethod.InputMethodManager;
 public class Game extends Activity {
 	private NvConnection conn;
 	private GestureDetector gestureDetector;
-	private InputMethodManager imm;
 	private InputHandler inHandler;
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -48,9 +42,9 @@ public class Game extends Activity {
 		conn = new NvConnection(Game.this.getIntent().getStringExtra("host"), Game.this, sv.getHolder().getSurface());
 		
 		// Listen for events on the game surface
-		inHandler = new InputHandler(conn);
+		InputMethodManager imm = (InputMethodManager)this.getSystemService(Service.INPUT_METHOD_SERVICE);
+		inHandler = new InputHandler(conn, imm, findViewById(R.id.surfaceView));
 		gestureDetector = new GestureDetector(getApplicationContext(), inHandler);
-		imm = (InputMethodManager)this.getSystemService(Service.INPUT_METHOD_SERVICE);
 		
 		// Start the connection
 		conn.start();
@@ -117,6 +111,9 @@ public class Game extends Activity {
 	
 	@Override
 	public boolean onTouchEvent(MotionEvent event) {
-		return gestureDetector.onTouchEvent(event);
+		if (!gestureDetector.onTouchEvent(event)) {
+			inHandler.handleSingleTouch(event);
+		}
+		return true;
 	}
 }

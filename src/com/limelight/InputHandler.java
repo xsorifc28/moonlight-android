@@ -7,8 +7,11 @@ import android.view.GestureDetector.OnGestureListener;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.View;
+import android.view.View.OnTouchListener;
+import android.view.inputmethod.InputMethodManager;
 
-public class InputHandler implements OnGestureListener {
+public class InputHandler implements OnGestureListener, OnTouchListener {
 	short inputMap = 0x0000;
 	private byte leftTrigger = 0x00;
 	private byte rightTrigger = 0x00;
@@ -20,14 +23,19 @@ public class InputHandler implements OnGestureListener {
 	private int lastTouchY = 0;
 	private int lastMouseX = Integer.MIN_VALUE;
 	private int lastMouseY = Integer.MIN_VALUE;
+	private long keyboardLastShown = Long.MIN_VALUE;
+	private boolean keyboardShown = false;
 	private boolean hasMoved = false;
 	
 	private NvConnection conn;
 	private KeyHandler keyHandler;
-	
-	InputHandler(NvConnection conn) {
+	private InputMethodManager imm;
+	private View view;
+	InputHandler(NvConnection conn, InputMethodManager imm, View view) {
 		this.conn = conn;
 		keyHandler = new KeyHandler(this);
+		this.imm = imm;
+		this.view = view;
 	}
 	
 	void sendControllerInputPacket() {
@@ -155,7 +163,6 @@ public class InputHandler implements OnGestureListener {
 
 	@Override
 	public boolean onSingleTapUp(MotionEvent e) {
-		// TODO Auto-generated method stub
 		return false;
 	}
 
@@ -164,22 +171,20 @@ public class InputHandler implements OnGestureListener {
 			float distanceY) {
 		if (e2.getPointerCount() == 1) {
 			handleSingleTouch(e2);
-		} else {
-			if (e1 == null) {
-				System.out.println("e1 is NULL!");
+		} else if (e2.getPointerCount() == 3){
+			System.out.println("distanceY: " + distanceY);
+			if (distanceY > 20F && !keyboardShown) {
+				if (System.currentTimeMillis() - 500 > keyboardLastShown) {
+					imm.toggleSoftInputFromWindow(view.getApplicationWindowToken(), 0, 0);
+					keyboardShown = true;
+					keyboardLastShown = System.currentTimeMillis();
+				}
+			} else if (distanceY < -20F) {
+				imm.hideSoftInputFromWindow(view.getApplicationWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
+				keyboardShown = false;
 			}
-			if (e1 != null && e2 != null) {
-			System.out.println("onScroll");
-			System.out.println("e1 count: " + e1.getPointerCount() + " e2 count: " + e2.getPointerCount());
-			System.out.println("distX: " + distanceX + "\tdistY: " + distanceY);
-			}
-			/*if (e1.getPointerCount() == 3)
-			{
-				System.out.println("Three Finger Scroll!");
-			}*/
-			return true;
 		}
-		return false;
+		return true;
 	}
 
 	@Override
@@ -297,5 +302,11 @@ public class InputHandler implements OnGestureListener {
 	
 	public boolean onKeyUp(int keyCode, KeyEvent event) {
 		return keyHandler.onKeyUp(keyCode, event);
+	}
+
+	@Override
+	public boolean onTouch(View v, MotionEvent event) {
+		// TODO Auto-generated method stub
+		return false;
 	}
 }
