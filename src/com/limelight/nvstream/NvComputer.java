@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.util.LinkedList;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -22,6 +23,7 @@ public class NvComputer {
 	private UUID uniqueID;
 	
 	private NvHTTP nvHTTP;
+	private LinkedList<NvApp> appList;
 	
 	
 	private int sessionID;
@@ -44,6 +46,8 @@ public class NvComputer {
 			Log.e("NvComputer Constructor", "Unable to get MAC Address " + e.getMessage());
 			this.nvHTTP = new NvHTTP(this.ipAddressString, "00:00:00:00:00:00");
 		}
+		
+		this.appList = new LinkedList<NvApp>();
 		
 		this.updatePairState();
 	}
@@ -91,28 +95,72 @@ public class NvComputer {
 	}
 	
 	public void updatePairState() {
-		try {
-			this.pairState = this.nvHTTP.getPairState();
-		} catch (IOException e) {
-			Log.e("NvComputer UpdatePaired", "Unable to get Pair State " + e.getMessage());
-			this.pairState = false;
-		} catch (XmlPullParserException e) {
-			Log.e("NvComputer UpdatePaired", "Unable to get Pair State " + e.getMessage());
-			this.pairState = false;
-		}
-		
-		/*if (this.pairState == true) {
-			try {
-				this.sessionID = this.nvHTTP.getSessionId();
-			} catch (IOException e) {
-				Log.e("NvComputer UpdatePaired", "Unable to get Session ID " + e.getMessage());
-				this.sessionID = 0;
-			} catch (XmlPullParserException e) {
-				Log.e("NvComputer UpdatePaired", "Unable to get Session ID " + e.getMessage());
-				this.sessionID = 0;
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					Log.d("NvComputer UpdatePairState", "Blocking on getPairState");
+					NvComputer.this.pairState = NvComputer.this.nvHTTP.getPairState();
+					NvComputer.this.pairState = true;
+					Log.d("NvComputer UpdatePairState", "Blocking on getPairState");
+					
+					if (NvComputer.this.pairState == true) {
+						Log.v("NvComputer UpdatePairState", "We are paired with the computer.");
+						NvComputer.this.getSessionIDFromServer();
+					}
+					
+				} catch (IOException e) {
+					Log.e("NvComputer UpdatePairState", "Unable to get Pair State " + e.getMessage());
+					NvComputer.this.pairState = false;
+				} catch (XmlPullParserException e) {
+					Log.e("NvComputer UpdatePairState", "Unable to get Pair State " + e.getMessage());
+					
+					e.printStackTrace();
+					NvComputer.this.pairState = false;
+				}
 			}
-			
-		}*/
+		}).start();
+	}
+	
+	public void getSessionIDFromServer() {
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					Log.e("NvComputer GetSessionIDFromServer", "Blocking on getSessionID");
+					NvComputer.this.sessionID = NvComputer.this.nvHTTP.getSessionId();
+					Log.e("NvComputer GetSessionIDFromServer", "Passed getSessionID");
+					Log.e("NvComputer GetSessionIDFromServer", "Got the session ID of " + NvComputer.this.sessionID);
+					
+					NvComputer.this.getAppListFromServer();
+				} catch (IOException e) {
+					Log.e("NvComputer GetSessionIDFromServer", "Unable to get Session ID " + e.getMessage());
+					NvComputer.this.sessionID = 0;
+				} catch (XmlPullParserException e) {
+					Log.e("NvComputer GetSessionIDFromServer", "Unable to get Session ID " + e.getMessage());
+					NvComputer.this.sessionID = 0;
+				}
+			}
+		}).start();
+	}
+	
+	public void getAppListFromServer() {
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				if (NvComputer.this.sessionID != 0) {
+					try {
+						Log.d("NvComputer GetAppListFromServer", "Blocking on getAppList");
+						NvComputer.this.appList = NvComputer.this.nvHTTP.getAppList(NvComputer.this.sessionID);
+						Log.d("NvComputer GetAppListFromServer", "Passed getAppList");
+					} catch (IOException e) {
+						Log.e("NvComputer GetAppListFromServer", "Unable to get Application List " + e.getMessage());
+					} catch (XmlPullParserException e) {
+						Log.e("NvComputer GetAppListFromServer", "Unable to get Application List " + e.getMessage());
+					}
+				}
+			}
+		}).start();		
 	}
 	
 	public boolean getPairState() {
@@ -132,7 +180,7 @@ public class NvComputer {
 	}
 	
 	public String toString() {
-		StringBuilder returnStringBuilder = new StringBuilder();
+		/*StringBuilder returnStringBuilder = new StringBuilder();
 		returnStringBuilder.append("NvComputer 0x");
 		returnStringBuilder.append(Integer.toHexString(this.hashCode()).toUpperCase(Locale.getDefault()));
 		returnStringBuilder.append("\n|- Hostname: ");
@@ -149,10 +197,18 @@ public class NvComputer {
 		returnStringBuilder.append(this.mac);
 		returnStringBuilder.append("\n|- UniqueID: ");
 		returnStringBuilder.append(this.uniqueID);
-		returnStringBuilder.append("\n\\- Pair State: ");
+		returnStringBuilder.append("\n|- Pair State: ");
 		returnStringBuilder.append(this.pairState);
+		returnStringBuilder.append("\n|- Session ID: ");
+		returnStringBuilder.append(this.sessionID);
+		
+		for (NvApp currentApp : this.appList) {
+			returnStringBuilder.append("\n|------ Application: `" + currentApp.getAppName() + "`, Application ID: " + currentApp.getAppId() + ", isRunning: " + currentApp.getIsRunning());
+		}
+		
 		returnStringBuilder.append("\n");
-		return returnStringBuilder.toString();
+		return returnStringBuilder.toString();*/
+		return this.hostname;  
 	}
 	
 	public boolean equals(Object obj) {
@@ -161,5 +217,15 @@ public class NvComputer {
 		} else {
 			return false;
 		}
+	}
+	
+	public NvApp checkIfRunning() {
+		for (NvApp currentApp : this.appList) {
+			if (currentApp.getIsRunning()) {
+				return currentApp;
+			}
+		}
+		
+		return null;
 	}
 }

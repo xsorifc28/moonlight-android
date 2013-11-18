@@ -8,8 +8,6 @@ import java.net.MulticastSocket;
 
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Set;
 import java.util.UUID;
@@ -26,13 +24,11 @@ import org.xbill.DNS.TextParseException;
 import org.xbill.DNS.Type;
 
 import com.limelight.ComputerList.ComputerListAdapter;
-import com.limelight.nvstream.av.AvRtpPacket;
 
 import android.app.Activity;
-import android.os.AsyncTask;
 import android.util.Log;
 
-public class NvmDNS extends AsyncTask<Void, Integer, Void> {
+public class NvmDNS {
 
 	public static String MDNS_QUERY = "_nvstream._tcp.local.";
 	public static String MDNS_MULTICAST_GROUP = "224.0.0.251";
@@ -41,12 +37,10 @@ public class NvmDNS extends AsyncTask<Void, Integer, Void> {
 
 	public static final int WAIT_MS = 1000;
 
-	//private HashSet<NvComputer> responses;
-	//private LinkedList<NvComputer> responses;
 	private MulticastSocket socket;
-	
-	
 	private LinkedBlockingQueue<DatagramPacket> packets = new LinkedBlockingQueue<DatagramPacket>();
+	private Thread acceptThread;
+	private Thread processThread;
 
 	static {
 		try {
@@ -62,8 +56,6 @@ public class NvmDNS extends AsyncTask<Void, Integer, Void> {
 	public NvmDNS(Activity activity, LinkedList<NvComputer> computerList, ComputerListAdapter adapter) {
 		this.adapter = adapter;
 		this.parent = activity;
-		//this.responses = new HashSet<NvComputer>();
-		//this.responses = computerList;
 
 		// Create our Socket Connection
 		try {
@@ -132,73 +124,92 @@ public class NvmDNS extends AsyncTask<Void, Integer, Void> {
 	}
 
 	public void waitForResponses() {
-		new Thread(new Runnable() {
+		// This thread receives responses and adds them to a LinkedBlockingQueue
+		this.acceptThread = new Thread(new Runnable() {
 			@Override
 			public void run() {
-				Log.v("NvmDNS Response", "mDNS Loop Started");
-		
-				// We support up to 1500 byte packets
-				
-				
-		
-				Message message = null;
-		
-				while (!NvmDNS.this.socket.isClosed()) {
-					// Attempt to receive a packet/response
-					try {
-						Log.d("NvmDNS Response", "Blocking on this.nvstream_query_socket.recieve()");
-						byte[] data = new byte[1500];
-						DatagramPacket packet = new DatagramPacket(data, data.length);
-						NvmDNS.this.socket.receive(packet);
-						
-						NvmDNS.this.packets.add(packet);
-						
-						
-						Log.d("NvmDNS Response", "Blocking passed on this.nvstream_query_socket.recieve()");
-						//message = new Message(packet.getData());
-						//NvmDNS.this.parseRecord(message, packet.getAddress());
-					} catch (IOException e) {
-						if (NvmDNS.this.socket.isClosed()) {
-							Log.e("NvmDNS Response", "The socket was closed on us. The timer must have been reached.");
-							return;
-						} else {
-							Log.e("NvmDNS Response", "There was an error receiving the response.");
-							Log.e("NvmDNS Response", e.getMessage());
-							continue;
-						}
-					}
-				}	
+				NvmDNS.this.acceptResponses();
 			}
-		}).start();
+		});
 		
-		
-		new Thread(new Runnable() {
+		// This thread processes responses
+		this.processThread = new Thread(new Runnable() {
 			@Override
 			public void run() {
-				while(true) {
-					DatagramPacket packet = null;
-					try {
-						 packet = NvmDNS.this.packets.take();
-					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-						return;
-					}
-					
-					Message message = null;
-					try {
-						message = new Message(packet.getData());
-					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-					NvmDNS.this.parseRecord(message, packet.getAddress());
-					
+				NvmDNS.this.processResponses();
+			}
+		});
+		
+
+		this.acceptThread.start();
+		this.processThread.start();
+	}
+	
+	public void cleanup() {
+		this.acceptThread.interrupt();
+		this.processThread.interrupt();
+	}
+	
+	private void acceptResponses() {
+		Log.v("NvmDNS Response", "mDNS Loop Started");
+		
+		// We support up to 1500 byte packets
+		// We do use this. Silly Java
+		@SuppressWarnings("unused")
+		Message message = null;
+
+		while (!NvmDNS.this.socket.isClosed()) {
+			// Attempt to receive a packet/response
+			try {
+				byte[] data = new byte[1500];
+				DatagramPacket packet = new DatagramPacket(data, data.length);
+				
+				Log.d("NvmDNS Response", "Blocking on this.nvstream_query_socket.recieve()");
+				NvmDNS.this.socket.receive(packet);
+				Log.d("NvmDNS Response", "Blocking passed on this.nvstream_query_socket.recieve()");
+				
+				NvmDNS.this.packets.add(packet);
+				Log.e("NvmDNS Reponse 1", "Adding packet from " + packet.getAddress().getCanonicalHostName());
+				
+			} catch (IOException e) {
+				if (NvmDNS.this.socket.isClosed()) {
+					Log.e("NvmDNS Response", "The socket was closed on us. The timer must have been reached.");
+					return;
+				} else {
+					Log.e("NvmDNS Response", "There was an error receiving the response.");
+					Log.e("NvmDNS Response", e.getMessage());
+					continue;
 				}
 			}
-		}).start();
+		}
 	}
-
+	
+	private void processResponses() {
+		while(true) {
+			DatagramPacket packet = null;
+			try {
+				 packet = NvmDNS.this.packets.take();
+			} catch (InterruptedException e) {
+				// We don't really care that we were interrupted
+				Log.e("NvmDNS ProcessResponses", "The packet Queue was Interrupted");
+				return;
+			}
+			
+			Log.e("NvmDNS ProcessResponses", "Getting packet from " + packet.getAddress().getCanonicalHostName());
+			
+			Message message = null;
+			
+			try {
+				message = new Message(packet.getData());
+			} catch (IOException e) {
+				Log.e("NvmDNS ProcessResponses", "There was an error processing the packet: " + e.getMessage());
+				continue;
+			}
+			NvmDNS.this.parseRecord(message, packet.getAddress());
+		}
+	}
+	
+	
 	private void parseRecord(Message message, InetAddress address) {
 		// We really only care about the ADDITIONAL section (specifically the text records)
 		Record[] responses = message.getSectionArray(Section.ADDITIONAL);
@@ -212,11 +223,20 @@ public class NvmDNS extends AsyncTask<Void, Integer, Void> {
 			Log.v("NvmDNS Response", "Question: " + message.getSectionArray(Section.ANSWER)[0].getName().toString());
 			Log.v("NvmDNS Response", "Response: " + responses[0].getName().toString());
 			
-					
-			// TODO: The DNS entry we get is "XENITH._nvstream._tcp.local."
-			// And the .'s in there are not actually periods. Or something.
 			String hostname = responses[0].getName().toString();
-	
+			
+			// Our response is in the form of 'XENITH._nvstream._tcp.local.'
+			// However the periods are not actually periods (i.e. ASCII 46)
+			// even though they pretend to be. So we need to get the index
+			// of the first _ and then subtract one from it
+			
+			try {
+				int index = hostname.indexOf('_');
+				hostname = hostname.substring(0, index - 1);
+			} catch (ArrayIndexOutOfBoundsException e) {
+				
+			}
+			
 			// The records can be returned in any order, so we need to figure out which one is the TXTRecord
 			// We get three records back: A TXTRecord, a SRVRecord and an ARecord
 			TXTRecord txtRecord = null;
@@ -266,20 +286,12 @@ public class NvmDNS extends AsyncTask<Void, Integer, Void> {
 
 			final NvComputer computer = new NvComputer(hostname, address, serviceState, numberOfApps, gpuType, mac, uniqueID);
 			
-			//this.responses.add(computer);
-			
-			
-			
 			this.parent.runOnUiThread(new Runnable() {
 			     public void run() {
 			    	 NvmDNS.this.adapter.add(computer);
-			    	 
-						
-			//stuff that updates ui
 			    	 NvmDNS.this.adapter.notifyDataSetChanged();
 			    }
 			});
-			
 		} catch (ArrayIndexOutOfBoundsException e) {
 			Log.e("NvmDNS Response", "We recieved a malformed DNS repsonse.");
 		}
@@ -303,52 +315,5 @@ public class NvmDNS extends AsyncTask<Void, Integer, Void> {
 		}
 		
 		return split[1];
-	}
-	
-	// What follows is an implementation of Android's AsyncTask.
-	// The first step is to send our query, then we start our
-	// RX thread to parse responses. However we only want to accept
-	// responses for a limited amount of time so we start a new thread
-	// to kill the socket after a set amount of time
-	// Then we return control to the foreground thread
-	
-	@Override
-	protected Void doInBackground(Void... thisParameterIsUseless) {
-		Log.v("NvmDNS ASync", "doInBackground entered");
-
-		this.sendQuery();
-
-
-		// We want to run our wait thread for an amount of time then close the socket.
-		new Thread(new Runnable() {
-			@Override
-			public void run() {
-				Log.v("NvmDNS Wait", "Going to sleep for " + NvmDNS.WAIT_MS + "ms");
-				try {
-					Thread.sleep(NvmDNS.WAIT_MS);
-				} catch (InterruptedException e) {
-					Log.e("NvmDNS Wait", "Woke up from sleep before time.");
-					Log.e("NvmDNS Wait", e.getMessage());
-				}
-				Log.v("NvmDNS Wait", "Woke up from sleep");
-				NvmDNS.this.socket.close();
-				Log.v("NvmDNS Wait", "Socket Closed");
-			}
-		}).start();
-
-		this.waitForResponses();
-
-		Log.v("NvmDNS ASync", "doInBackground exit");
-		return null; 
-	}
-
-	@Override
-	protected void onProgressUpdate(Integer... progress) {
-		Log.v("NvmDNS ASync", "onProgressUpdate");
-	}
-
-	@Override
-	protected void onPostExecute(Void moreUselessParameters) {
-		Log.v("NvmDNS ASync", "onPostExecute");
 	}
 }
