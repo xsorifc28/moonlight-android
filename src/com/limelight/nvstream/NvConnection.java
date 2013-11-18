@@ -233,6 +233,23 @@ public class NvConnection {
 		});
 	}
 	
+	public void sendKeyboardInput(final short keyMap, final byte keyDirection) {
+		if (inputStream == null)
+			return;
+		
+		threadPool.execute(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					inputStream.sendKeyboardInput(keyMap, keyDirection);
+				} catch (IOException e) {
+					displayToast(e.getMessage());
+					NvConnection.this.stop();
+				}
+			}
+		});
+	}
+	
 	private void displayToast(final String message)
 	{
 		activity.runOnUiThread(new Runnable() {
