@@ -1,6 +1,10 @@
 package com.limelight.nvstream;
 
-public class NvApp {
+import java.io.Serializable;
+
+public class NvApp implements Serializable {
+
+	private static final long serialVersionUID = -3291477915666012986L;
 	private String appName;
 	private int appId;
 	private boolean isRunning;
@@ -27,5 +31,10 @@ public class NvApp {
 	
 	public boolean getIsRunning() {
 		return this.isRunning;
+	}
+	
+	@Override
+	public String toString() {
+		return this.appName;
 	}
 }

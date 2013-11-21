@@ -152,11 +152,6 @@ public class NvmDNS {
 	
 	private void acceptResponses() {
 		Log.v("NvmDNS Response", "mDNS Loop Started");
-		
-		// We support up to 1500 byte packets
-		// We do use this. Silly Java
-		@SuppressWarnings("unused")
-		Message message = null;
 
 		while (!NvmDNS.this.socket.isClosed()) {
 			// Attempt to receive a packet/response
@@ -230,11 +225,9 @@ public class NvmDNS {
 			// even though they pretend to be. So we need to get the index
 			// of the first _ and then subtract one from it
 			
-			try {
+			if (hostname.length() > 2) {
 				int index = hostname.indexOf('_');
 				hostname = hostname.substring(0, index - 1);
-			} catch (ArrayIndexOutOfBoundsException e) {
-				
 			}
 			
 			// The records can be returned in any order, so we need to figure out which one is the TXTRecord
@@ -286,12 +279,16 @@ public class NvmDNS {
 
 			final NvComputer computer = new NvComputer(hostname, address, serviceState, numberOfApps, gpuType, mac, uniqueID);
 			
-			this.parent.runOnUiThread(new Runnable() {
-			     public void run() {
-			    	 NvmDNS.this.adapter.add(computer);
-			    	 NvmDNS.this.adapter.notifyDataSetChanged();
-			    }
-			});
+			if (!this.adapter.contains(computer)) {
+			
+				
+				this.parent.runOnUiThread(new Runnable() {
+				     public void run() {
+				    	 NvmDNS.this.adapter.add(computer);
+				    	 NvmDNS.this.adapter.notifyDataSetChanged();
+				    }
+				});
+			}
 		} catch (ArrayIndexOutOfBoundsException e) {
 			Log.e("NvmDNS Response", "We recieved a malformed DNS repsonse.");
 		}

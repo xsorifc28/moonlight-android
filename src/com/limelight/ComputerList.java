@@ -11,9 +11,13 @@ import com.limelight.nvstream.NvmDNS;
 import android.os.Bundle;
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.view.Menu;
+import android.widget.AdapterView;
+import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
+import android.view.View;
 
 public class ComputerList extends Activity {
 	
@@ -34,6 +38,10 @@ public class ComputerList extends Activity {
 		public boolean hasStableIds() {
 			return true;
 		}
+		
+		public boolean contains(NvComputer other) {
+			return this.mIdMap.containsKey(other);
+		}
 	}
 	
 	private NvmDNS nvmDNS;
@@ -50,6 +58,17 @@ public class ComputerList extends Activity {
 		this.computerListAdapter = new ComputerListAdapter(this, android.R.layout.simple_list_item_1, computerList);
 		
 		listView.setAdapter(computerListAdapter);
+		
+		listView.setOnItemClickListener(new OnItemClickListener() {
+			@Override
+			public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+				NvComputer computer = ((ComputerListAdapter)parent.getAdapter()).getItem(position);
+				Intent intent = new Intent(ComputerList.this, GameList.class);
+				intent.putExtra("NvComputer", computer);
+				
+				startActivity(intent);
+			}
+		}); 
 	}
 	
 	@Override

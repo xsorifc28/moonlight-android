@@ -1,18 +1,19 @@
 package com.limelight.nvstream;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.SocketException;
-import java.net.UnknownHostException;
+import java.util.Collections;
 import java.util.LinkedList;
-import java.util.Locale;
+import java.util.List;
 import java.util.UUID;
-
 import org.xmlpull.v1.XmlPullParserException;
-
 import android.util.Log;
 
-public class NvComputer {
+public class NvComputer implements Serializable {
+	private static final long serialVersionUID = -653368538349941148L;
+	
 	private String hostname;
 	private InetAddress ipAddress;
 	private String ipAddressString;
@@ -22,7 +23,7 @@ public class NvComputer {
 	private String mac;
 	private UUID uniqueID;
 	
-	private NvHTTP nvHTTP;
+	private transient NvHTTP nvHTTP;
 	private LinkedList<NvApp> appList;
 	
 	
@@ -49,7 +50,7 @@ public class NvComputer {
 		
 		this.appList = new LinkedList<NvApp>();
 		
-		this.updatePairState();
+		//this.updatePairState();
 	}
 	
 	public String getHostname() {
@@ -95,13 +96,9 @@ public class NvComputer {
 	}
 	
 	public void updatePairState() {
-		new Thread(new Runnable() {
-			@Override
-			public void run() {
 				try {
 					Log.d("NvComputer UpdatePairState", "Blocking on getPairState");
 					NvComputer.this.pairState = NvComputer.this.nvHTTP.getPairState();
-					NvComputer.this.pairState = true;
 					Log.d("NvComputer UpdatePairState", "Blocking on getPairState");
 					
 					if (NvComputer.this.pairState == true) {
@@ -118,14 +115,9 @@ public class NvComputer {
 					e.printStackTrace();
 					NvComputer.this.pairState = false;
 				}
-			}
-		}).start();
 	}
 	
 	public void getSessionIDFromServer() {
-		new Thread(new Runnable() {
-			@Override
-			public void run() {
 				try {
 					Log.e("NvComputer GetSessionIDFromServer", "Blocking on getSessionID");
 					NvComputer.this.sessionID = NvComputer.this.nvHTTP.getSessionId();
@@ -140,14 +132,10 @@ public class NvComputer {
 					Log.e("NvComputer GetSessionIDFromServer", "Unable to get Session ID " + e.getMessage());
 					NvComputer.this.sessionID = 0;
 				}
-			}
-		}).start();
 	}
 	
 	public void getAppListFromServer() {
-		new Thread(new Runnable() {
-			@Override
-			public void run() {
+		
 				if (NvComputer.this.sessionID != 0) {
 					try {
 						Log.d("NvComputer GetAppListFromServer", "Blocking on getAppList");
@@ -158,9 +146,7 @@ public class NvComputer {
 					} catch (XmlPullParserException e) {
 						Log.e("NvComputer GetAppListFromServer", "Unable to get Application List " + e.getMessage());
 					}
-				}
-			}
-		}).start();		
+				}		
 	}
 	
 	public boolean getPairState() {
@@ -172,10 +158,10 @@ public class NvComputer {
 	}
 	
 	public int hashCode() {
-		if (this.ipAddress == null) {
+		if (this.uniqueID == null) {
 			return -1;
 		} else {
-			return this.ipAddressString.hashCode();
+			return this.uniqueID.hashCode();
 		}
 	}
 	
@@ -211,12 +197,17 @@ public class NvComputer {
 		return this.hostname;  
 	}
 	
+	@Override
 	public boolean equals(Object obj) {
 		if (obj instanceof UUID) {
 			return this.uniqueID.equals(obj);
 		} else {
 			return false;
 		}
+	}
+	
+	public List<NvApp> getApps() {
+		return Collections.unmodifiableList(this.appList);
 	}
 	
 	public NvApp checkIfRunning() {

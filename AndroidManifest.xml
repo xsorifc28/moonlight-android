@@ -41,6 +41,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name="com.limelight.GameList"
+            android:label="@string/title_activity_game_list"
+            android:parentActivityName="com.limelight.ComputerList" >
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value="com.limelight.ComputerList" />
+        </activity>
     </application>
 
 </manifest>
