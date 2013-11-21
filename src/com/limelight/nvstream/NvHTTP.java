@@ -89,7 +89,7 @@ public class NvHTTP {
 	}
 	
 	public LinkedList<NvApp> getAppList(int sessionId) throws IOException, XmlPullParserException {
-		InputStream in = openHttpConnection(baseUrl + "/applist?session=" + sessionId);
+		InputStream in = openHttpConnection(baseUrl + "/applist?session=1" /*+ sessionId*/);
 		XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
 		factory.setNamespaceAware(true);
 		XmlPullParser xpp = factory.newPullParser();
@@ -129,8 +129,8 @@ public class NvHTTP {
 	// Returns gameSession XML attribute
 	public int launchApp(int sessionId, int appId) throws IOException,
 			XmlPullParserException {
-		InputStream in = openHttpConnection(baseUrl + "/launch?session="
-			+ sessionId + "&appid=" + appId);
+		InputStream in = openHttpConnection(baseUrl + "/launch?session=1"
+			/*+ sessionId*/ + "&appid=" + appId);
 		String gameSession = getXmlString(in, "gamesession");
 		return Integer.parseInt(gameSession);
 	}

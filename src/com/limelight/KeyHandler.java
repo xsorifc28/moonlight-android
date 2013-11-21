@@ -7,15 +7,17 @@ import android.view.KeyEvent;
 
 public class KeyHandler {
 	InputHandler inHandler;
-	
+	KeyboardHandler keyboardHandler;
 	KeyHandler(InputHandler inHandler) {
 		this.inHandler = inHandler;
+		keyboardHandler = new KeyboardHandler(inHandler);
 	}
-	
+
 	public boolean onKeyDown(int keyCode, KeyEvent event) {
-		// Skip keyboard and virtual button events
-		if (event.getSource() == InputDevice.SOURCE_KEYBOARD)
-			return false;
+		// let keyboard handler take care of keyboard events
+		if (event.getSource() == InputDevice.SOURCE_KEYBOARD) {
+			return keyboardHandler.onKeyDown(keyCode, event);
+		}
 
 		switch (keyCode) {
 		case KeyEvent.KEYCODE_BUTTON_START:
@@ -79,9 +81,10 @@ public class KeyHandler {
 	}
 
 	public boolean onKeyUp(int keyCode, KeyEvent event) {
-		// Skip keyboard and virtual button events
-		if (event.getSource() == InputDevice.SOURCE_KEYBOARD)
-			return false;
+		// let keyboard handler take care of keyboard events
+		if (event.getSource() == InputDevice.SOURCE_KEYBOARD) {
+			return keyboardHandler.onKeyUp(keyCode, event);
+		}
 
 		switch (keyCode) {
 		case KeyEvent.KEYCODE_BUTTON_START:

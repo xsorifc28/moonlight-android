@@ -271,12 +271,12 @@ public class NvConnection {
 	{
 		NvHTTP h = new NvHTTP(host, getMacAddressString());
 		
-		if (!h.getPairState())
+		/*if (!h.getPairState())
 		{
 			displayToast("Device not paired with computer");
 			return;
 		}
-		
+		*/
 		int sessionId = h.getSessionId();
 		int appId = h.getSteamAppId(sessionId);
 		

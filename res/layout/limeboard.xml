@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<View xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" >
+    <KeyboardView 
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" >
+    </KeyboardView>
+	 <Keyboard
+	     android:keyWidth="50px"
+         android:keyHeight="50px"
+         android:horizontalGap="2px"
+         android:verticalGap="2px" >
+      <Row android:keyWidth="32px" >
+         <Key android:keyLabel="Q" 
+              android:codes="1" />
+         <Key android:keyLabel="W" 
+             android:codes="2"/>
+         <Key android:keyLabel="E" 
+             android:codes="3"/>
+         <Key android:keyLabel="R" 
+             android:codes="4"/>
+         <Key android:keyLabel="T" 
+             android:codes="5"/>
+         <Key android:keyLabel="Y" 
+             android:codes="6"/>
+         <Key android:keyLabel="U" 
+             android:codes="7"/>
+         <Key android:keyLabel="I" 
+             android:codes="8"/>
+         <Key android:keyLabel="O"
+              android:codes="9"/>
+         <Key android:keyLabel="P" 
+             android:codes="10"/>
+         <Key android:keyLabel="[" 
+             android:codes="11"/>
+         <Key android:keyLabel="]"
+              android:codes="12"/>
+         <Key android:keyLabel="\" 
+             android:codes="13"/>
+     </Row>
+     <Row android:keyWidth="32px" >
+         <Key android:keyLabel="Tab" 
+             android:codes="50"/>
+         <Key android:keyLabel="A"
+              android:codes="14"/>
+         <Key android:keyLabel="S" 
+             android:codes="15"/>
+         <Key android:keyLabel="D"
+              android:codes="16"/>
+         <Key android:keyLabel="F" 
+             android:codes="17"/>
+         <Key android:keyLabel="G" 
+             android:codes="18"/>
+         <Key android:keyLabel="H" 
+             android:codes="19"/>
+         <Key android:keyLabel="J" 
+             android:codes="20"/>
+         <Key android:keyLabel="K"
+              android:codes="21"/>
+         <Key android:keyLabel="L" 
+             android:codes="22"/>
+         <Key android:keyLabel=";" 
+             android:codes="23"/>
+         <Key android:keyLabel="&quot;"
+              android:codes="24"/>
+         <Key android:keyLabel="Ent" 
+             android:codes="25"/>
+     </Row>
+     <Row android:keyWidth="32px" >
+         <Key android:keyLabel="L Shift" 
+             android:codes="26"/>
+         <Key android:keyLabel="Z" 
+              android:codes="27"/>
+         <Key android:keyLabel="X" 
+              android:codes="28"/>
+         <Key android:keyLabel="C" 
+              android:codes="29"/>
+         <Key android:keyLabel="V" 
+              android:codes="30"/>
+         <Key android:keyLabel="B" 
+              android:codes="31"/>
+         <Key android:keyLabel="N" 
+              android:codes="32"/>
+         <Key android:keyLabel="M" 
+              android:codes="33"/>
+         <Key android:keyLabel="," 
+              android:codes="34"/>
+         <Key android:keyLabel="." 
+              android:codes="35"/>
+         <Key android:keyLabel="/" 
+              android:codes="36"/>
+         <Key android:keyLabel="R Shift"  
+             android:codes="37"/>
+     </Row>
+ </Keyboard>
+</View>

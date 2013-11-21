@@ -13,6 +13,7 @@ import android.view.inputmethod.InputMethodManager;
 
 public class InputHandler implements OnGestureListener, OnTouchListener {
 	short inputMap = 0x0000;
+	short keyMap = 0x0000;
 	private byte leftTrigger = 0x00;
 	private byte rightTrigger = 0x00;
 	private short rightStickX = 0x0000;
@@ -41,6 +42,10 @@ public class InputHandler implements OnGestureListener, OnTouchListener {
 	void sendControllerInputPacket() {
 		conn.sendControllerInput(inputMap, leftTrigger, rightTrigger,
 				leftStickX, leftStickY, rightStickX, rightStickY);
+	}
+	
+	void sendKeyboardInputPacket(byte keyDirection) {
+		conn.sendKeyboardInput(keyMap, keyDirection);
 	}
 	
 	private void updateMousePosition(int eventX, int eventY) {
@@ -172,7 +177,6 @@ public class InputHandler implements OnGestureListener, OnTouchListener {
 		if (e2.getPointerCount() == 1) {
 			handleSingleTouch(e2);
 		} else if (e2.getPointerCount() == 3){
-			System.out.println("distanceY: " + distanceY);
 			if (distanceY > 20F && !keyboardShown) {
 				if (System.currentTimeMillis() - 500 > keyboardLastShown) {
 					imm.toggleSoftInputFromWindow(view.getApplicationWindowToken(), 0, 0);
@@ -309,4 +313,5 @@ public class InputHandler implements OnGestureListener, OnTouchListener {
 		// TODO Auto-generated method stub
 		return false;
 	}
+
 }
