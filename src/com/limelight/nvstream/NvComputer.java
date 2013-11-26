@@ -41,16 +41,14 @@ public class NvComputer implements Serializable {
 		this.uniqueID = uniqueID;
 		
 		this.appList = new LinkedList<NvApp>();
-		
-		//this.updatePairState();
 	}
 	
 	public NvHTTP nvHTTP() {
-        try {
-			return new NvHTTP(this.ipAddressString, NvConnection.getMacAddressString());
+		try {
+			return new NvHTTP(this.ipAddress, NvConnection.getMacAddressString());
 		} catch (SocketException e) {
 			Log.e("NvComputer Constructor", "Unable to get MAC Address " + e.getMessage());
-			return new NvHTTP(this.ipAddressString, "00:00:00:00:00:00");
+			return new NvHTTP(this.ipAddress, "00:00:00:00:00:00");
 		}
 	}
 
