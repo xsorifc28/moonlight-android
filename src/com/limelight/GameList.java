@@ -53,22 +53,20 @@ public class GameList extends Activity {
 		computer = (NvComputer) intent.getSerializableExtra("NvComputer");
 		this.setTitle(computer.getHostname());
 		
-		final ListView listView = (ListView) findViewById(R.id.gameList);
-		List<NvApp> gameList = computer.getApps();
-		
-		for (NvApp game : gameList) {
-			System.out.println(game.getAppName());
-		}
-		
-		
-		GameListAdapter gameListAdapter = new GameListAdapter(this, android.R.layout.simple_list_item_1, gameList);
-		
-		listView.setAdapter(gameListAdapter);
 		
 		new Thread(new Runnable() {
 			@Override
 			public void run() {
 				GameList.this.computer.updatePairState();
+				
+				GameList.this.runOnUiThread(new Runnable() {
+					@Override
+					public void run() {
+						GameListAdapter gameListAdapter = new GameListAdapter(GameList.this, android.R.layout.simple_list_item_1, computer.getApps());
+						ListView listView = (ListView) findViewById(R.id.gameList);
+						listView.setAdapter(gameListAdapter);
+					}
+				});
 				
 			}
 		}).start();

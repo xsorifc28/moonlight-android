@@ -23,7 +23,6 @@ public class NvComputer implements Serializable {
 	private String mac;
 	private UUID uniqueID;
 	
-	private transient NvHTTP nvHTTP;
 	private LinkedList<NvApp> appList;
 	
 	
@@ -41,18 +40,20 @@ public class NvComputer implements Serializable {
 		this.mac = mac;
 		this.uniqueID = uniqueID;
 		
-		try {
-			this.nvHTTP = new NvHTTP(this.ipAddressString, NvConnection.getMacAddressString());
-		} catch (SocketException e) {
-			Log.e("NvComputer Constructor", "Unable to get MAC Address " + e.getMessage());
-			this.nvHTTP = new NvHTTP(this.ipAddressString, "00:00:00:00:00:00");
-		}
-		
 		this.appList = new LinkedList<NvApp>();
 		
 		//this.updatePairState();
 	}
 	
+	public NvHTTP nvHTTP() {
+		try {
+			return new NvHTTP(this.ipAddressString, NvConnection.getMacAddressString());
+		} catch (SocketException e) {
+			Log.e("NvComputer Constructor", "Unable to get MAC Address " + e.getMessage());
+			return new NvHTTP(this.ipAddressString, "00:00:00:00:00:00");
+		}
+	}
+
 	public String getHostname() {
 		return this.hostname;
 	}
@@ -98,8 +99,8 @@ public class NvComputer implements Serializable {
 	public void updatePairState() {
 				try {
 					Log.d("NvComputer UpdatePairState", "Blocking on getPairState");
-					NvComputer.this.pairState = NvComputer.this.nvHTTP.getPairState();
-					Log.d("NvComputer UpdatePairState", "Blocking on getPairState");
+					NvComputer.this.pairState = NvComputer.this.nvHTTP().getPairState();
+					Log.d("NvComputer UpdatePairState", "Done Blocking on getPairState");
 					
 					if (NvComputer.this.pairState == true) {
 						Log.v("NvComputer UpdatePairState", "We are paired with the computer.");
@@ -120,7 +121,7 @@ public class NvComputer implements Serializable {
 	public void getSessionIDFromServer() {
 				try {
 					Log.e("NvComputer GetSessionIDFromServer", "Blocking on getSessionID");
-					NvComputer.this.sessionID = NvComputer.this.nvHTTP.getSessionId();
+					NvComputer.this.sessionID = NvComputer.this.nvHTTP().getSessionId();
 					Log.e("NvComputer GetSessionIDFromServer", "Passed getSessionID");
 					Log.e("NvComputer GetSessionIDFromServer", "Got the session ID of " + NvComputer.this.sessionID);
 					
@@ -139,7 +140,7 @@ public class NvComputer implements Serializable {
 				if (NvComputer.this.sessionID != 0) {
 					try {
 						Log.d("NvComputer GetAppListFromServer", "Blocking on getAppList");
-						NvComputer.this.appList = NvComputer.this.nvHTTP.getAppList(NvComputer.this.sessionID);
+						NvComputer.this.appList = NvComputer.this.nvHTTP().getAppList(NvComputer.this.sessionID);
 						Log.d("NvComputer GetAppListFromServer", "Passed getAppList");
 					} catch (IOException e) {
 						Log.e("NvComputer GetAppListFromServer", "Unable to get Application List " + e.getMessage());

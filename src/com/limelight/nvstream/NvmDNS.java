@@ -208,6 +208,7 @@ public class NvmDNS {
 	private void parseRecord(Message message, InetAddress address) {
 		// We really only care about the ADDITIONAL section (specifically the text records)
 		Record[] responses = message.getSectionArray(Section.ADDITIONAL);
+		
 		// We only want to process records that actually have a length, have an ANSWER
 		// section that has stuff in it and that the ANSWER to our query is what we sent
 		if (responses.length != 0 && 
@@ -225,10 +226,10 @@ public class NvmDNS {
 			// even though they pretend to be. So we need to get the index
 			// of the first _ and then subtract one from it
 			
-			if (hostname.length() > 2) {
-				int index = hostname.indexOf('_');
-				hostname = hostname.substring(0, index - 1);
-			}
+			//if (hostname.length() > 2) {
+				//int index = hostname.indexOf('_');
+			//	hostname = hostname.substring(0, index - 1);
+			//}
 			
 			// The records can be returned in any order, so we need to figure out which one is the TXTRecord
 			// We get three records back: A TXTRecord, a SRVRecord and an ARecord
