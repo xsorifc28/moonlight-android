@@ -1,14 +1,18 @@
 package com.limelight;
 
 import com.limelight.nvstream.NvConnection;
+import com.limelight.nvstream.NvConnectionListener;
 import com.limelight.nvstream.input.NvControllerPacket;
+import com.limelight.utils.Dialog;
+import com.limelight.utils.SpinnerDialog;
 
 import android.app.Activity;
-import android.content.ComponentCallbacks2;
+import android.graphics.PixelFormat;
 import android.os.Bundle;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.View.OnGenericMotionListener;
@@ -17,7 +21,7 @@ import android.view.Window;
 import android.view.WindowManager;
 
 
-public class Game extends Activity implements OnGenericMotionListener, OnTouchListener {
+public class Game extends Activity implements OnGenericMotionListener, OnTouchListener, NvConnectionListener {
 	private short inputMap = 0x0000;
 	private byte leftTrigger = 0x00;
 	private byte rightTrigger = 0x00;
@@ -32,6 +36,8 @@ public class Game extends Activity implements OnGenericMotionListener, OnTouchLi
 	private boolean hasMoved = false;
 	
 	private NvConnection conn;
+	private SpinnerDialog spinner;
+	private boolean displayedFailureDialog = false;
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -54,7 +60,13 @@ public class Game extends Activity implements OnGenericMotionListener, OnTouchLi
 		SurfaceView sv = (SurfaceView) findViewById(R.id.surfaceView);
 		sv.setOnGenericMotionListener(this);
 		sv.setOnTouchListener(this);
+		SurfaceHolder sh = sv.getHolder();
+		sh.setFixedSize(1280, 720);
+		sh.setFormat(PixelFormat.RGBX_8888);
 
+		// Start the spinner
+		spinner = SpinnerDialog.displayDialog(this, "Establishing Connection", "Starting connection", true);
+		
 		// Start the connection
 		conn = new NvConnection(Game.this.getIntent().getStringExtra("host"), Game.this, sv.getHolder().getSurface());
 		conn.start();
@@ -85,31 +97,21 @@ public class Game extends Activity implements OnGenericMotionListener, OnTouchLi
 	
 	@Override
 	public void onPause() {
+		displayedFailureDialog = true;
+		conn.stop();
 		finish();
 		super.onPause();
 	}
 	
 	@Override
-	public void onDestroy() {
-		conn.stop();
+	protected void onDestroy() {
+		SpinnerDialog.closeDialogs();
+		Dialog.closeDialogs();
 		super.onDestroy();
 	}
 	
 	@Override
-	public void onTrimMemory(int trimLevel) {
-		if (trimLevel >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)
-		{
-			conn.trim();
-		}
-	}
-	
-	@Override
 	public boolean onKeyDown(int keyCode, KeyEvent event) {
-		
-		// Skip keyboard and virtual button events
-		if (event.getSource() == InputDevice.SOURCE_KEYBOARD)
-			return super.onKeyDown(keyCode, event);
-		
 		switch (keyCode) {
 		case KeyEvent.KEYCODE_BUTTON_START:
 		case KeyEvent.KEYCODE_MENU:
@@ -173,11 +175,6 @@ public class Game extends Activity implements OnGenericMotionListener, OnTouchLi
 	
 	@Override
 	public boolean onKeyUp(int keyCode, KeyEvent event) {
-
-		// Skip keyboard and virtual button events
-		if (event.getSource() == InputDevice.SOURCE_KEYBOARD)
-			return super.onKeyUp(keyCode, event);
-		
 		switch (keyCode) {
 		case KeyEvent.KEYCODE_BUTTON_START:
 		case KeyEvent.KEYCODE_MENU:
@@ -457,5 +454,44 @@ public class Game extends Activity implements OnGenericMotionListener, OnTouchLi
 	public boolean onTouch(View v, MotionEvent event) {
 		// Send it to the activity's touch event handler
 		return onTouchEvent(event);
+	}
+
+	@Override
+	public void stageStarting(Stage stage) {
+		if (spinner != null) {
+			spinner.setMessage("Starting "+stage.getName());
+		}
+	}
+
+	@Override
+	public void stageComplete(Stage stage) {
+	}
+
+	@Override
+	public void stageFailed(Stage stage) {
+		spinner.dismiss();
+		spinner = null;
+
+		if (!displayedFailureDialog) {
+			displayedFailureDialog = true;
+			Dialog.displayDialog(this, "Connection Error", "Starting "+stage.getName()+" failed", true);
+			conn.stop();
+		}
+	}
+
+	@Override
+	public void connectionTerminated(Exception e) {
+		if (!displayedFailureDialog) {
+			displayedFailureDialog = true;
+			e.printStackTrace();
+			Dialog.displayDialog(this, "Connection Terminated", "The connection failed unexpectedly", true);
+			conn.stop();
+		}
+	}
+
+	@Override
+	public void connectionStarted() {
+		spinner.dismiss();
+		spinner = null;
 	}
 }

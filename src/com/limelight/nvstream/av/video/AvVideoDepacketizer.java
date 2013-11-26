@@ -4,9 +4,9 @@ import java.util.LinkedList;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import com.limelight.nvstream.av.AvByteBufferDescriptor;
-import com.limelight.nvstream.av.AvByteBufferPool;
 import com.limelight.nvstream.av.AvDecodeUnit;
 import com.limelight.nvstream.av.AvRtpPacket;
+import com.limelight.nvstream.av.ConnectionStatusListener;
 
 import android.media.MediaCodec;
 
@@ -17,54 +17,30 @@ public class AvVideoDepacketizer {
 	private int avcNalDataLength = 0;
 	private int currentlyDecoding;
 	
+	// Cached buffer descriptor to save on allocations
+	// Only safe to use in decode thread!!!!
+	private AvByteBufferDescriptor cachedDesc;
+	
 	// Sequencing state
 	private short lastSequenceNumber;
 	
-	private LinkedBlockingQueue<AvDecodeUnit> decodedUnits = new LinkedBlockingQueue<AvDecodeUnit>();
+	private ConnectionStatusListener controlListener;
 	
-	private AvByteBufferPool pool = new AvByteBufferPool(1500);
+	private static final int DU_LIMIT = 15;
+	private LinkedBlockingQueue<AvDecodeUnit> decodedUnits = new LinkedBlockingQueue<AvDecodeUnit>(DU_LIMIT);
 	
-	public byte[] allocatePacketBuffer()
+	public AvVideoDepacketizer(ConnectionStatusListener controlListener)
 	{
-		return pool.allocate();
-	}
-	
-	public void trim()
-	{
-		pool.purge();
+		this.controlListener = controlListener;
+		this.cachedDesc = new AvByteBufferDescriptor(null, 0, 0);
 	}
 	
 	private void clearAvcNalState()
 	{
-		if (avcNalDataChain != null)
-		{
-			for (AvByteBufferDescriptor avbb : avcNalDataChain)
-			{
-				AvVideoPacket packet = (AvVideoPacket) avbb.context;
-				
-				if (packet.release() == 0) {
-					pool.free(avbb.data);
-				}
-			}
-		}
-		
 		avcNalDataChain = null;
 		avcNalDataLength = 0;
 	}
-	
-	public void releaseDecodeUnit(AvDecodeUnit decodeUnit)
-	{
-		// Remove the reference from each AvVideoPacket (freeing if okay)
-		for (AvByteBufferDescriptor buff : decodeUnit.getBufferList())
-		{
-			AvVideoPacket packet = (AvVideoPacket) buff.context;
-			
-			if (packet.release() == 0) {
-				pool.free(buff.data);
-			}
-		}
-	}
-	
+
 	private void reassembleAvcNal()
 	{
 		// This is the start of a new NAL
@@ -74,12 +50,11 @@ public class AvVideoDepacketizer {
 			
 			// Check if this is a special NAL unit
 			AvByteBufferDescriptor header = avcNalDataChain.getFirst();
-			AvByteBufferDescriptor specialSeq = NAL.getSpecialSequenceDescriptor(header);
 			
-			if (specialSeq != null)
+			if (NAL.getSpecialSequenceDescriptor(header, cachedDesc))
 			{
 				// The next byte after the special sequence is the NAL header
-				byte nalHeader = specialSeq.data[specialSeq.offset+specialSeq.length];
+				byte nalHeader = cachedDesc.data[cachedDesc.offset+cachedDesc.length];
 				
 				switch (nalHeader)
 				{
@@ -119,9 +94,10 @@ public class AvVideoDepacketizer {
 
 			// Construct the H264 decode unit
 			AvDecodeUnit du = new AvDecodeUnit(AvDecodeUnit.TYPE_H264, avcNalDataChain, avcNalDataLength, flags);
-			if (!decodedUnits.offer(du))
-			{
-				releaseDecodeUnit(du);
+			if (!decodedUnits.offer(du)) {
+				// We need a new IDR frame since we're discarding data now
+				decodedUnits.clear();
+				controlListener.connectionNeedsResync();
 			}
 			
 			// Clear old state
@@ -134,25 +110,21 @@ public class AvVideoDepacketizer {
 	{
 		AvByteBufferDescriptor location = packet.getNewPayloadDescriptor();
 		
-		// Add an initial reference
-		packet.addRef();
-		
 		while (location.length != 0)
 		{
 			// Remember the start of the NAL data in this packet
 			int start = location.offset;
 			
 			// Check for a special sequence
-			AvByteBufferDescriptor specialSeq = NAL.getSpecialSequenceDescriptor(location);
-			if (specialSeq != null)
+			if (NAL.getSpecialSequenceDescriptor(location, cachedDesc))
 			{
-				if (NAL.isAvcStartSequence(specialSeq))
+				if (NAL.isAvcStartSequence(cachedDesc))
 				{
 					// We're decoding H264 now
 					currentlyDecoding = AvDecodeUnit.TYPE_H264;
 					
 					// Check if it's the end of the last frame
-					if (NAL.isAvcFrameStart(specialSeq))
+					if (NAL.isAvcFrameStart(cachedDesc))
 					{
 						// Reassemble any pending AVC NAL
 						reassembleAvcNal();
@@ -163,14 +135,14 @@ public class AvVideoDepacketizer {
 					}
 					
 					// Skip the start sequence
-					location.length -= specialSeq.length;
-					location.offset += specialSeq.length;
+					location.length -= cachedDesc.length;
+					location.offset += cachedDesc.length;
 				}
 				else
 				{
 					// Check if this is padding after a full AVC frame
 					if (currentlyDecoding == AvDecodeUnit.TYPE_H264 &&
-						NAL.isPadding(specialSeq)) {
+						NAL.isPadding(cachedDesc)) {
 						// The decode unit is complete
 						reassembleAvcNal();
 					}
@@ -190,15 +162,13 @@ public class AvVideoDepacketizer {
 				// Catch the easy case first where byte 0 != 0x00
 				if (location.data[location.offset] == 0x00)
 				{
-					specialSeq = NAL.getSpecialSequenceDescriptor(location);
-					
 					// Check if this should end the current NAL
-					if (specialSeq != null)
+					if (NAL.getSpecialSequenceDescriptor(location, cachedDesc))
 					{
 						// Only stop if we're decoding something or this
 						// isn't padding
 						if (currentlyDecoding != AvDecodeUnit.TYPE_UNKNOWN ||
-							!NAL.isPadding(specialSeq))
+							!NAL.isPadding(cachedDesc))
 						{
 							break;
 						}
@@ -214,19 +184,10 @@ public class AvVideoDepacketizer {
 			{
 				AvByteBufferDescriptor data = new AvByteBufferDescriptor(location.data, start, location.offset-start);
 				
-				// Attach the current packet as the buffer context and increment the refcount
-				data.context = packet;
-				packet.addRef();
-				
 				// Add a buffer descriptor describing the NAL data in this packet
 				avcNalDataChain.add(data);
 				avcNalDataLength += location.offset-start;
 			}
-		}
-		
-		// If nothing useful came out of this, release the packet now
-		if (packet.release() == 0) {
-			pool.free(location.data);
 		}
 	}
 	
@@ -244,6 +205,9 @@ public class AvVideoDepacketizer {
 			// Reset the depacketizer state
 			currentlyDecoding = AvDecodeUnit.TYPE_UNKNOWN;
 			clearAvcNalState();
+			
+			// Request an IDR frame
+			controlListener.connectionNeedsResync();
 		}
 		
 		lastSequenceNumber = seq;
@@ -286,11 +250,11 @@ class NAL {
 	}
 	
 	// Returns a buffer descriptor describing the start sequence
-	public static AvByteBufferDescriptor getSpecialSequenceDescriptor(AvByteBufferDescriptor buffer)
+	public static boolean getSpecialSequenceDescriptor(AvByteBufferDescriptor buffer, AvByteBufferDescriptor outputDesc)
 	{
 		// NAL start sequence is 00 00 00 01 or 00 00 01
 		if (buffer.length < 3)
-			return null;
+			return false;
 		
 		// 00 00 is magic
 		if (buffer.data[buffer.offset] == 0x00 &&
@@ -304,19 +268,21 @@ class NAL {
 					buffer.data[buffer.offset+3] == 0x01)
 				{
 					// It's the AVC start sequence 00 00 00 01
-					return new AvByteBufferDescriptor(buffer.data, buffer.offset, 4);
+					outputDesc.reinitialize(buffer.data, buffer.offset, 4);
 				}
 				else
 				{
 					// It's 00 00 00
-					return new AvByteBufferDescriptor(buffer.data, buffer.offset, 3);
+					outputDesc.reinitialize(buffer.data, buffer.offset, 3);
 				}
+				return true;
 			}
 			else if (buffer.data[buffer.offset+2] == 0x01 ||
 					 buffer.data[buffer.offset+2] == 0x02)
 			{
 				// These are easy: 00 00 01 or 00 00 02
-				return new AvByteBufferDescriptor(buffer.data, buffer.offset, 3);
+				outputDesc.reinitialize(buffer.data, buffer.offset, 3);
+				return true;
 			}
 			else if (buffer.data[buffer.offset+2] == 0x03)
 			{
@@ -327,22 +293,23 @@ class NAL {
 				// or whether it's something else
 				
 				if (buffer.length < 4)
-					return null;
+					return false;
 				
 				if (buffer.data[buffer.offset+3] >= 0x00 &&
 					buffer.data[buffer.offset+3] <= 0x03)
 				{
 					// It's not really a special sequence after all
-					return null;
+					return false;
 				}
 				else
 				{
 					// It's not a standard replacement so it's a special sequence
-					return new AvByteBufferDescriptor(buffer.data, buffer.offset, 3);
+					outputDesc.reinitialize(buffer.data, buffer.offset, 3);
+					return true;
 				}
 			}
 		}
 		
-		return null;
+		return false;
 	}
 }

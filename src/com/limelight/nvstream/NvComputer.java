@@ -46,7 +46,7 @@ public class NvComputer implements Serializable {
 	}
 	
 	public NvHTTP nvHTTP() {
-		try {
+        try {
 			return new NvHTTP(this.ipAddressString, NvConnection.getMacAddressString());
 		} catch (SocketException e) {
 			Log.e("NvComputer Constructor", "Unable to get MAC Address " + e.getMessage());
