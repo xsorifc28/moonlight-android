@@ -27,6 +27,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 public class AddComputerManually extends Activity {
+
+    private static String IP = "150.250.143.118";
+
     private TextView hostText;
     private ComputerManagerService.ComputerManagerBinder managerBinder;
     private final LinkedBlockingQueue<String> computersToAdd = new LinkedBlockingQueue<String>();
@@ -34,7 +37,8 @@ public class AddComputerManually extends Activity {
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, final IBinder binder) {
             managerBinder = ((ComputerManagerService.ComputerManagerBinder)binder);
-            startAddThread();
+            //startAddThread();
+            doAddPc(IP);
         }
 
         public void onServiceDisconnected(ComponentName className) {

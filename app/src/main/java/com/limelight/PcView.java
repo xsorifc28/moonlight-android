@@ -33,6 +33,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.res.Configuration;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
 import android.preference.PreferenceManager;
 import android.view.ContextMenu;
@@ -80,6 +81,32 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
 
         public void onServiceDisconnected(ComponentName className) {
             managerBinder = null;
+        }
+    };
+
+    private Handler mHandler;
+    private Runnable runnable = new Runnable() {
+        public void run() {
+            int sz = pcGridAdapter.getCount();
+            Toast.makeText(getApplicationContext(), "PC List Size: " + String.valueOf(sz), Toast.LENGTH_SHORT).show();
+            if(sz == 0){
+                Intent i = new Intent(PcView.this, AddComputerManually.class);
+                startActivity(i);
+                pcGridAdapter.notifyDataSetChanged();
+            }else{
+                ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(0);
+                if (computer.details.reachability == ComputerDetails.Reachability.UNKNOWN) {
+                    // Do nothing
+                } else if (computer.details.reachability == ComputerDetails.Reachability.OFFLINE) {
+                    // Open the context menu if a PC is offline
+                    // Do nothing
+                } else if (computer.details.pairState != PairState.PAIRED) {
+                    // Pair an unpaired machine by default
+                    doPair(computer.details);
+                } else {
+                    doAppList(computer.details);
+                }
+            }
         }
     };
 
@@ -202,6 +229,28 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
         }
     }
 
+    // Added by Dillon and Samed
+    public void startFirstComputer() {
+        mHandler = new Handler();
+        mHandler.postDelayed(runnable, 5000);
+    }
+
+    public void removeAllComputers() {
+        Handler mHandler = new Handler();
+
+        mHandler.postDelayed(new Runnable() {
+            public void run() {
+
+                int sz = pcGridAdapter.getCount();
+                Toast.makeText(getApplicationContext(), "Un-pairing all", Toast.LENGTH_SHORT).show();
+                for (int i = 0; i < pcGridAdapter.getCount(); i++) {
+                    doUnpair(((ComputerObject) pcGridAdapter.getItem(i)).details);
+                    removeComputer(((ComputerObject) pcGridAdapter.getItem(i)).details);
+                }
+            }
+        },5000);
+    }
+
     @Override
     public void onDestroy() {
         super.onDestroy();
@@ -216,6 +265,9 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
         super.onResume();
 
         startComputerUpdates();
+
+        startFirstComputer();
+
     }
 
     @Override
@@ -231,6 +283,12 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
 
         Dialog.closeDialogs();
     }
+
+    @Override
+    public void onBackPressed() {
+        exitApp();
+    }
+
 
     @Override
     public void onCreateContextMenu(ContextMenu menu, View v, ContextMenuInfo menuInfo) {
@@ -628,6 +686,13 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
             }
         });
         registerForContextMenu(listView);
+    }
+
+    public void exitApp(){
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.addCategory(Intent.CATEGORY_HOME);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
     }
 
     public class ComputerObject {
