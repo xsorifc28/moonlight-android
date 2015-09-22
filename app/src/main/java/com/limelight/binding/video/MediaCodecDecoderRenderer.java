@@ -17,7 +17,6 @@ import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
 import android.media.MediaCodec.BufferInfo;
-import android.media.MediaCodec.CodecException;
 import android.os.Build;
 import android.view.SurfaceHolder;
 
@@ -118,19 +117,6 @@ public class MediaCodecDecoderRenderer extends EnhancedDecoderRenderer {
     }
 
     private void handleDecoderException(Exception e, ByteBuffer buf, int codecFlags) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            if (e instanceof CodecException) {
-                CodecException codecExc = (CodecException) e;
-
-                if (codecExc.isTransient()) {
-                    // We'll let transient exceptions go
-                    LimeLog.warning(codecExc.getDiagnosticInfo());
-                    return;
-                }
-
-                LimeLog.severe(codecExc.getDiagnosticInfo());
-            }
-        }
 
         // Only throw if this happens at the beginning of a stream
         if (totalFrames < 60) {
@@ -358,9 +344,7 @@ public class MediaCodecDecoderRenderer extends EnhancedDecoderRenderer {
         // Start the decoder
         videoDecoder.start();
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
             legacyInputBuffers = videoDecoder.getInputBuffers();
-        }
 
         if (directSubmit) {
             startDirectSubmitRendererThread();
@@ -420,15 +404,10 @@ public class MediaCodecDecoderRenderer extends EnhancedDecoderRenderer {
     private ByteBuffer getEmptyInputBuffer(int inputBufferIndex) {
         ByteBuffer buf;
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            buf = videoDecoder.getInputBuffer(inputBufferIndex);
-        }
-        else {
-            buf = legacyInputBuffers[inputBufferIndex];
+        buf = legacyInputBuffers[inputBufferIndex];
 
-            // Clear old input data pre-Lollipop
-            buf.clear();
-        }
+        // Clear old input data pre-Lollipop
+        buf.clear();
 
         return buf;
     }
@@ -482,9 +461,7 @@ public class MediaCodecDecoderRenderer extends EnhancedDecoderRenderer {
                     LimeLog.info("Patching level_idc to 42");
                     sps.level_idc = 42;
                 }
-                else {
-                    // Leave the profile alone (currently 5.0)
-                }
+
 
                 // TI OMAP4 requires a reference frame count of 1 to decode successfully. Exynos 4
                 // also requires this fixup.

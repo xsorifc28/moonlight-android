@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
+    <!-- Glass voice actions -->
+    <string name="magic">Start Cooper Rowan</string>
+    <string name="pref_voice_trigger">Stream Preferences</string>
+
     <!-- PC view menu entries -->
     <string name="pcview_menu_app_list">View Game List</string>
     <string name="pcview_menu_pair_pc">Pair with PC</string>

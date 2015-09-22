@@ -134,15 +134,11 @@ public class MediaCodecHelper {
 	private static LinkedList<MediaCodecInfo> getMediaCodecList() {
 		LinkedList<MediaCodecInfo> infoList = new LinkedList<MediaCodecInfo>();
 		
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-			MediaCodecList mcl = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
-            Collections.addAll(infoList, mcl.getCodecInfos());
-		}
-		else {
-			for (int i = 0; i < MediaCodecList.getCodecCount(); i++) {
-				infoList.add(MediaCodecList.getCodecInfoAt(i));
-			}	
-		}
+
+        for (int i = 0; i < MediaCodecList.getCodecCount(); i++) {
+            infoList.add(MediaCodecList.getCodecInfoAt(i));
+        }
+
 		
 		return infoList;
 	}
