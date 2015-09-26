@@ -27,6 +27,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.res.Configuration;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
 import android.view.ContextMenu;
 import android.view.Menu;
@@ -58,6 +59,54 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
 
     public final static String NAME_EXTRA = "Name";
     public final static String UUID_EXTRA = "UUID";
+
+    private Handler mHandler;
+    private Runnable runnable = new Runnable() {
+        public void run() {
+            int sz = appGridAdapter.getCount();
+//                Toast.makeText(getApplicationContext(), "App List Size: " + String.valueOf(sz), Toast.LENGTH_SHORT).show();
+            if (sz == 0) {
+//                Toast.makeText(getApplicationContext(), "No App in list. Please verify on Computer.", Toast.LENGTH_LONG).show();
+                mHandler.postDelayed(runnable, 1000);
+            } else {
+                AppObject app = (AppObject) appGridAdapter.getItem(0);
+                ServerHelper.doStart(AppView.this, app.app, computer, managerBinder);
+            }
+        }
+    };
+
+    @Override
+    public void onBackPressed() {
+        exitApp();
+    }
+
+    // Added by Dillon and Samed
+    public void startFirstApp() {
+        if(appGridAdapter != null && appGridAdapter.getCount() > 0){
+            AppObject app = (AppObject) appGridAdapter.getItem(0);
+            ServerHelper.doQuit(AppView.this,
+                    ServerHelper.getCurrentAddressFromComputer(computer),
+                    app.app, managerBinder, new Runnable() {
+                        @Override
+                        public void run() {
+                            // Trigger a poll immediately
+                            suspendGridUpdates = false;
+                            if (poller != null) {
+                                poller.pollNow();
+                            }
+                        }
+                    });
+        }
+        mHandler = new Handler();
+        mHandler.postDelayed(runnable, 1000);
+    }
+
+    public void exitApp(){
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.addCategory(Intent.CATEGORY_HOME);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+    }
 
     private ComputerManagerService.ComputerManagerBinder managerBinder;
     private final ServiceConnection serviceConnection = new ServiceConnection() {
@@ -252,13 +301,16 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
     protected void onResume() {
         super.onResume();
 
-        startComputerUpdates();
+        // Added by Dillon and Samed
+        startFirstApp();
+
+        //startComputerUpdates();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-
+        mHandler.removeCallbacks(runnable);
         stopComputerUpdates();
     }
 
@@ -291,6 +343,10 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
                 menu.add(Menu.NONE, CANCEL_ID, 2, getResources().getString(R.string.applist_menu_cancel));
             }
         }
+
+        // Added by Dillon and Samed
+        // Automatically start the first app in the list
+        startFirstApp();
     }
 
     @Override

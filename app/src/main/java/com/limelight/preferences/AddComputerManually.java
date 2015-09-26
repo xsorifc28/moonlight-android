@@ -28,7 +28,9 @@ import android.widget.Toast;
 
 public class AddComputerManually extends Activity {
 
-    private static String IP = "150.250.143.118";
+    //private static String IP = "150.250.143.118";
+
+    private static String IP = "10.0.1.16";
 
     private TextView hostText;
     private ComputerManagerService.ComputerManagerBinder managerBinder;
@@ -37,8 +39,12 @@ public class AddComputerManually extends Activity {
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, final IBinder binder) {
             managerBinder = ((ComputerManagerService.ComputerManagerBinder)binder);
-            //startAddThread();
-            doAddPc(IP);
+            computersToAdd.add(IP);
+            startAddThread();
+            //doAddPc(IP);
+
+            //startFirstComputer();
+
         }
 
         public void onServiceDisconnected(ComponentName className) {
@@ -97,7 +103,7 @@ public class AddComputerManually extends Activity {
                     } catch (InterruptedException e) {
                         return;
                     }
-
+                    //doAddPc(IP);
                     doAddPc(computer);
                 }
             }

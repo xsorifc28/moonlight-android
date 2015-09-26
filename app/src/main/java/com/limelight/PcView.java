@@ -94,17 +94,20 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
                 startActivity(i);
                 pcGridAdapter.notifyDataSetChanged();
             }else{
-                ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(0);
-                if (computer.details.reachability == ComputerDetails.Reachability.UNKNOWN) {
-                    // Do nothing
-                } else if (computer.details.reachability == ComputerDetails.Reachability.OFFLINE) {
-                    // Open the context menu if a PC is offline
-                    // Do nothing
-                } else if (computer.details.pairState != PairState.PAIRED) {
-                    // Pair an unpaired machine by default
-                    doPair(computer.details);
-                } else {
-                    doAppList(computer.details);
+                for(int i = 0; i < pcGridAdapter.getCount(); i++) {
+                    ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(i);
+                    if (computer.details.reachability == ComputerDetails.Reachability.UNKNOWN) {
+                        // Do nothing
+                    } else if (computer.details.reachability == ComputerDetails.Reachability.OFFLINE) {
+                        // Open the context menu if a PC is offline
+                        // Do nothing
+                    } else if (computer.details.pairState != PairState.PAIRED) {
+                        // Pair an unpaired machine by default
+                        doPair(computer.details);
+                    } else {
+                        doAppList(computer.details);
+                        break;
+                    }
                 }
             }
         }
