@@ -67,13 +67,26 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
 //                Toast.makeText(getApplicationContext(), "App List Size: " + String.valueOf(sz), Toast.LENGTH_SHORT).show();
             if (sz == 0) {
 //                Toast.makeText(getApplicationContext(), "No App in list. Please verify on Computer.", Toast.LENGTH_LONG).show();
-                mHandler.postDelayed(runnable, 1000);
+                mHandler.postDelayed(runnable, 3000);
             } else {
                 AppObject app = (AppObject) appGridAdapter.getItem(0);
                 ServerHelper.doStart(AppView.this, app.app, computer, managerBinder);
             }
         }
     };
+
+    private boolean manualQuit = false;
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(requestCode == ServerHelper.APP_QUIT_REQUEST_CODE) {
+            Toast.makeText(this,"Quit Request Code",Toast.LENGTH_SHORT).show();
+            if(data.getExtras().getBoolean("manualQuit")) {
+                manualQuit = true;
+            }
+        }
+    }
 
     @Override
     public void onBackPressed() {
@@ -98,7 +111,7 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
                     });
         }
         mHandler = new Handler();
-        mHandler.postDelayed(runnable, 1000);
+        mHandler.postDelayed(runnable, 3000);
     }
 
     public void exitApp(){
@@ -302,7 +315,9 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
         super.onResume();
 
         // Added by Dillon and Samed
-        startFirstApp();
+        if(!manualQuit) {
+            startFirstApp();
+        }
 
         //startComputerUpdates();
     }
@@ -335,8 +350,8 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
         int runningAppId = getRunningAppId();
         if (runningAppId != -1) {
             if (runningAppId == selectedApp.app.getAppId()) {
-                menu.add(Menu.NONE, START_OR_RESUME_ID, 1, getResources().getString(R.string.applist_menu_resume));
-                menu.add(Menu.NONE, QUIT_ID, 2, getResources().getString(R.string.applist_menu_quit));
+                menu.add(Menu.NONE, START_OR_RESUME_ID, 2, getResources().getString(R.string.applist_menu_resume));
+                menu.add(Menu.NONE, QUIT_ID, 1, getResources().getString(R.string.applist_menu_quit));
             }
             else {
                 menu.add(Menu.NONE, START_WTIH_QUIT, 1, getResources().getString(R.string.applist_menu_quit_and_start));
@@ -346,7 +361,7 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
 
         // Added by Dillon and Samed
         // Automatically start the first app in the list
-        startFirstApp();
+        //startFirstApp();
     }
 
     @Override

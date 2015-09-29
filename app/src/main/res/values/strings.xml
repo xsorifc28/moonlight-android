@@ -77,7 +77,7 @@
     <string name="applist_quit_app">Quitting</string>
     <string name="applist_quit_success">Successfully quit</string>
     <string name="applist_quit_fail">Failed to quit</string>
-    <string name="applist_quit_confirmation">Are you sure you want to quit the running app? All unsaved data will be lost.</string>
+    <string name="applist_quit_confirmation">Are you sure you don\'t want to quit the running app? All unsaved data will be lost.</string>
 
     <!-- Add computer manually activity -->
     <string name="title_add_pc">Add PC Manually</string>
@@ -121,4 +121,18 @@
     <string name="category_advanced_settings">Advanced Settings</string>
     <string name="title_decoder_list">Change decoder</string>
     <string name="summary_decoder_list">Software decoding may improve video latency at lower streaming settings</string>
+
+    <string name="horse">horse</string>
+    <!--Used in voice recognition -->
+    <string name="coronal">coronal</string>
+    <string name="axial">axial</string>
+    <string name="sagittal">sagittal</string>
+    <string name="next">next</string>
+    <string name="full_screen">Full Screen</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="kws_caption">To start demonstration say \"look at\".</string>
+    <string name="menu_caption">Say \"Sagittal\", \"axial\", \"coronal\" or \"full\" to choose particular example.</string>
+
+
 </resources>

@@ -38,13 +38,13 @@ public class UiHelper {
             @Override
             public void onClick(DialogInterface dialog, int which) {
                 switch (which){
-                    case DialogInterface.BUTTON_POSITIVE:
+                    case DialogInterface.BUTTON_NEGATIVE:
                         if (onYes != null) {
                             onYes.run();
                         }
                         break;
 
-                    case DialogInterface.BUTTON_NEGATIVE:
+                    case DialogInterface.BUTTON_POSITIVE:
                         if (onNo != null) {
                             onNo.run();
                         }

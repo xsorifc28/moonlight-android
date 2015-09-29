@@ -9,10 +9,10 @@ android {
 
     defaultConfig {
         minSdkVersion 16
-        targetSdkVersion 23
+        targetSdkVersion 19
 
         versionName "3.1.9"
-        versionCode = 64
+        versionCode 64
     }
 
     productFlavors {
@@ -56,10 +56,31 @@ android {
         }
     }
 
-    tasks.withType(JavaCompile) {
+    task copyJniLibs(type: Copy) {
+        from 'libs/armeabi'
+        into 'src/main/jniLibs/armeabi'
+    }
+
+    task copyJniLibs2(type: Copy) {
+        from 'libs/armeabi-v7a'
+        into 'src/main/jniLibs/armeabi-v7a'
+    }
+
+    copyJniLibs.dependsOn 'ndkBuild'
+    copyJniLibs2.dependsOn 'copyJniLibs'
+
+    /*tasks.withType(JavaCompile) {
         compileTask -> compileTask.dependsOn ndkBuild
+    }*/
+
+    tasks.withType(JavaCompile) {
+        compileTask -> compileTask.dependsOn copyJniLibs2
     }
 }
+
+ant.importBuild 'assets.xml'
+preBuild.dependsOn(list, checksum)
+clean.dependsOn(clean_assets)
 
 dependencies {
     compile group: 'org.jcodec', name: 'jcodec', version: '0.1.9'
@@ -73,4 +94,11 @@ dependencies {
     compile files('libs/jmdns-3.4.2.jar')
     compile files('libs/limelight-common.jar')
     compile files('libs/tinyrtsp.jar')
+
+    // PocketSphinx
+    compile files('libs/pocketsphinx-android-0.8-nolib.jar')
+
+    compile fileTree(dir: 'libs', include: '*.jar')
+
+
 }

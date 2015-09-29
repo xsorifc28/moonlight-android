@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Use the constants defined in the ContextualMenus.Command enum-->
+    <item
+        android:id="@+id/sagittal"
+        android:title="@string/sagittal">
+    </item>
+    <item
+        android:id="@+id/horse"
+        android:title="@string/horse">
+    </item>
+    <item
+        android:id="@+id/axail"
+        android:title="@string/axial">
+    </item>
+    <item
+        android:id="@+id/coronal"
+        android:title="@string/coronal">
+    </item>
+    <item
+        android:id="@+id/full_screen"
+        android:title="@string/full_screen">
+    </item>
+</menu>

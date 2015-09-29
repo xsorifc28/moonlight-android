@@ -114,6 +114,7 @@
     <orderEntry type="library" exported="" name="limelight-common" level="project" />
     <orderEntry type="library" exported="" name="jmdns-3.4.2" level="project" />
     <orderEntry type="library" exported="" name="okhttp-2.4.0" level="project" />
+    <orderEntry type="library" exported="" name="pocketsphinx-android-0.8-nolib" level="project" />
     <orderEntry type="library" exported="" name="jcodec-0.1.9" level="project" />
     <orderEntry type="library" exported="" name="okio-1.5.0" level="project" />
     <orderEntry type="library" exported="" name="gdk-android-19" level="project" />

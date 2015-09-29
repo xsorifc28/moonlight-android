@@ -1,7 +1,6 @@
 package com.limelight;
 
-
-import com.limelight.LimelightBuildProps;
+import com.google.android.glass.media.Sounds;
 import com.limelight.binding.PlatformBinding;
 import com.limelight.binding.input.ControllerHandler;
 import com.limelight.binding.input.KeyboardTranslator;
@@ -19,11 +18,13 @@ import com.limelight.nvstream.input.MouseButtonPacket;
 import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.ui.GameGestures;
 import com.limelight.utils.Dialog;
+import com.limelight.utils.ServerHelper;
 import com.limelight.utils.SpinnerDialog;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Point;
 import android.hardware.input.InputManager;
@@ -32,7 +33,12 @@ import android.net.ConnectivityManager;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Message;
 import android.os.SystemClock;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
+import android.util.Log;
 import android.view.Display;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -49,13 +55,19 @@ import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Toast;
 
+import java.util.ArrayList;
 import java.util.Locale;
+
+
 
 
 public class Game extends Activity implements SurfaceHolder.Callback,
     OnGenericMotionListener, OnTouchListener, NvConnectionListener, EvdevListener,
     OnSystemUiVisibilityChangeListener, GameGestures
+        //, RecognitionListener
 {
+    private static final String TAG = "Game";
+
     private int lastMouseX = Integer.MIN_VALUE;
     private int lastMouseY = Integer.MIN_VALUE;
     private int lastButtonState = 0;
@@ -95,6 +107,9 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     public static final String EXTRA_UNIQUEID = "UniqueId";
     public static final String EXTRA_STREAMING_REMOTE = "Remote";
 
+    private SpeechRecognizer mSpeechRecognizer;
+    private Intent mSpeechIntent;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -105,6 +120,15 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             config.locale = new Locale(locale);
             getResources().updateConfiguration(config, getResources().getDisplayMetrics());
         }
+
+
+       createListener();
+        startListener();
+
+        // Start acquiring the voice recognizer
+        //startRecognition();
+
+        //getWindow().requestFeature(WindowUtils.FEATURE_VOICE_COMMANDS);
 
         // We don't want a title bar
         requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -194,7 +218,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 .setEnableSops(prefConfig.enableSops)
                 .enableAdaptiveResolution((decoderRenderer.getCapabilities() &
                         VideoDecoderRenderer.CAPABILITY_ADAPTIVE_RESOLUTION) != 0)
-                .enableLocalAudioPlayback(prefConfig.playHostAudio)
+                .enableLocalAudioPlayback(false)
+                //.enableLocalAudioPlayback(prefConfig.playHostAudio)
                 .setMaxPacketSize(remote ? 1024 : 1292)
                 .setRemote(remote)
                 .build();
@@ -283,6 +308,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         }
     }
 
+
     @Override
     protected void onStop() {
         super.onStop();
@@ -319,7 +345,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     @Override
     protected void onDestroy() {
         super.onDestroy();
-
+        if (mSpeechRecognizer != null)
+        {
+            mSpeechRecognizer.destroy();
+        }
         wifiLock.release();
     }
 
@@ -419,9 +448,36 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         return (byte) modifierFlags;
     }
 
+    int state = 0;
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         // Pass-through virtual navigation keys
+
+        if(keyCode == KeyEvent.KEYCODE_BACK){
+            //quit
+            Intent data = new Intent();
+            data.putExtra("manualQuit",true);
+            setResult(ServerHelper.APP_QUIT_REQUEST_CODE, data);
+            exitApp();
+        }
+
+        if(keyCode == KeyEvent.KEYCODE_DPAD_CENTER) {
+            if (state == 0) {
+                onKeyDown(KeyEvent.KEYCODE_Q, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Q));
+                state = 1;
+            } else if (state == 1) {
+                onKeyDown(KeyEvent.KEYCODE_W, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_W));
+                state = 2;
+            } else if (state == 2) {
+                onKeyDown(KeyEvent.KEYCODE_E, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_E));
+                state = 3;
+            } else if (state == 3) {
+                onKeyDown(KeyEvent.KEYCODE_R, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_R));
+                state = 0;
+            }
+        }
+
+
         if ((event.getFlags() & KeyEvent.FLAG_VIRTUAL_HARD_KEY) != 0) {
             return super.onKeyDown(keyCode, event);
         }
@@ -900,4 +956,348 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             hideSystemUi(2000);
         }
     }
+
+    public void exitApp(){
+        onStop();
+    }
+
+    public void createListener() {
+        mSpeechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+        AbstractMainRecognitionListener mRecognitionListener = new AbstractMainRecognitionListener();
+        mSpeechRecognizer.setRecognitionListener(mRecognitionListener);
+        mSpeechIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        //mSpeechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US");				// i18n
+        mSpeechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        mSpeechIntent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+        mSpeechIntent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 100);				// To loop every X results
+    }
+    public void startListener() {
+        mSpeechRecognizer.startListening(mSpeechIntent);
+    }
+    public void destroyListener() {
+        mSpeechRecognizer.cancel();
+//        mSpeechRecognizer.stopListening();
+        mSpeechRecognizer.destroy();
+    }
+    public void restartListener() {
+        mSpeechRecognizer.cancel();
+//        mSpeechRecognizer.stopListening();
+        Handler handler = new Handler( new Handler.Callback() {
+            @Override
+            public boolean handleMessage(Message msg) {
+                startListener();
+                return true;
+            }
+        });
+        // sleeper time
+        handler.sendEmptyMessageDelayed(0, 200);
+    }
+    public void replaceListener() {
+        mSpeechRecognizer.cancel();
+//        mSpeechRecognizer.stopListening();
+        Handler handlerP = new Handler(new Handler.Callback() {
+            @Override
+            public boolean handleMessage(Message msg) {
+                destroyListener();
+                Handler handlerF = new Handler() {
+                    @Override
+                    public void handleMessage(Message msg) {
+                        super.handleMessage(msg);
+                        createListener();
+                        Handler handler = new Handler() {
+                            @Override
+                            public void handleMessage(Message msg) {
+                                super.handleMessage(msg);
+                                startListener();
+                                Log.d(TAG, "Replaced Listener");
+                            }
+                        };
+                        // sleeper time
+                        handler.sendEmptyMessageDelayed(0, 150);
+                    }
+                };
+                // sleeper time
+                handlerF.sendEmptyMessageDelayed(0,150);
+            return true;
+            }
+        });
+        // sleeper time
+        handlerP.sendEmptyMessageDelayed(0, 150);
+
+
+    }
+
+    public class AbstractMainRecognitionListener implements RecognitionListener
+    {
+        @SuppressLint("ResourceAsColor")
+        @Override
+        public void onReadyForSpeech(Bundle params) {
+            Log.d(TAG, "onReadyForSpeech");
+            Log.i(TAG, "Start Speaking");
+        }
+
+        @SuppressLint("ResourceAsColor")
+        @Override
+        public void onBeginningOfSpeech() {
+            Log.d(TAG, "onBeginningOfSpeech");
+            Log.i(TAG, "Speaking detected");
+            AudioManager audio = (AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
+            audio.playSoundEffect(Sounds.SELECTED);
+        }
+
+        @Override
+        public void onRmsChanged(float rmsdB) {
+
+        }
+
+        @Override
+        public void onBufferReceived(byte[] buffer) {
+            Log.d(TAG, "onBufferReceived");
+        }
+
+        @SuppressLint("ResourceAsColor")
+        @Override
+        public void onEndOfSpeech() {
+            Log.d(TAG, "onEndOfSpeech");
+            Log.i(TAG, "Processing...");
+        }
+
+        @SuppressLint("ResourceAsColor")
+        @Override
+        public void onError(int error) {
+            Log.d(TAG, "onSpeechError " + error);
+            //AudioManager audio = (AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
+            //audio.playSoundEffect(Sounds.ERROR);
+
+            Log.i(TAG, "Error " + error);
+            //Something went wrong
+            if(error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
+                //8
+                Log.i(TAG, "Recognizer Busy");
+                replaceListener();
+                return;
+            } else if (error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                restartListener();
+                return;
+            } else if (error == SpeechRecognizer.ERROR_CLIENT) {
+                //5
+                Log.i(TAG, "Client Error");
+                replaceListener();
+                return;
+            } else if(error == SpeechRecognizer.ERROR_AUDIO) {
+                //3
+                Log.i(TAG, "Audio Recording Error");
+            } else if(error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                //9
+                Log.i(TAG, "Insufficient Permissions");
+            } else if(error == SpeechRecognizer.ERROR_NETWORK) {
+                //2
+                Log.i(TAG, "Network Issues");
+            } else if(error == SpeechRecognizer.ERROR_NO_MATCH) {
+                //7
+                Log.i(TAG, "Speech cannot be matched to text");
+            } else if(error == SpeechRecognizer.ERROR_SERVER) {
+                //4
+                Log.i(TAG, "Server Errors");
+            } else if(error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT) {
+                //1
+                Log.i(TAG, "Network Timeout...");
+            }
+            replaceListener();
+        }
+
+        @SuppressLint("ResourceAsColor")
+        @SuppressWarnings("unchecked")
+        @Override
+        public void onResults(Bundle results) {
+            Log.d(TAG, "oR " + results.get(SpeechRecognizer.RESULTS_RECOGNITION).toString());
+            ArrayList<String> pR = (ArrayList<String>) results.get(SpeechRecognizer.RESULTS_RECOGNITION);
+            String listString = "";
+            for (String s : pR) {
+                listString += s + " ";
+            }
+            Log.i(TAG, "Completing Action: '" + listString + "'");
+            AudioManager audio = (AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
+            audio.playSoundEffect(Sounds.SUCCESS);
+            if(listString.contains("switch") && listString.contains("to") || listString.contains("go")) {
+                Log.i(TAG, "Switch to detected...");
+                if (listString.contains("axial")) {
+                    Log.i(TAG, "Send Q");
+                    onKeyDown(KeyEvent.KEYCODE_Q, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Q));
+                }
+                if (listString.contains("sagittal") || listString.contains("San") && listString.contains("Diego")) {
+                    Log.i(TAG, "Send W");
+                    onKeyDown(KeyEvent.KEYCODE_W, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_W));
+                }
+                if (listString.contains("coronal") || listString.contains("Corona")) {
+                    Log.i(TAG, "Send E");
+                    onKeyDown(KeyEvent.KEYCODE_E, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_E));
+                }
+                if (listString.contains("full") && listString.contains("screen")) {
+                    Log.i(TAG, "Send R");
+                    onKeyDown(KeyEvent.KEYCODE_R, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_R));
+                }
+            }
+            //Resume speech
+            restartListener();
+        }
+
+        @SuppressLint("ResourceAsColor")
+        @SuppressWarnings("unchecked")
+
+        @Override
+        public void onPartialResults(Bundle partialResults) {
+            Log.d(TAG, "oPR " + partialResults.get(SpeechRecognizer.RESULTS_RECOGNITION).toString());
+            ArrayList<String> pR = (ArrayList<String>) partialResults.get(SpeechRecognizer.RESULTS_RECOGNITION);
+            String listString = "";
+            for (String s : pR) {
+                listString += s + " ";
+            }
+            Log.i(TAG, '"' + listString + '"');
+        }
+
+        @Override
+        public void onEvent(int eventType, Bundle params) {
+            Log.d(TAG, "Recognition Listener onEvent " + eventType + " and " + params.toString());
+        }
+    }
+
+    /**
+     * This starts the voice recognition library implemented using pocketsphinx
+     */
+
+   /* private static final String KWS_SEARCH = "wakeup";
+    private static final String MENU_SEARCH = "menu";
+    private static final String KEYPHRASE = "switch to";
+
+    private static final String KWS_SAGITTAL = "sagittal";
+    private static final String KWS_AXIAL = "axial";
+    private static final String KWS_CORONAL = "coronal";
+    private static final String KWS_FULL = "full screen";
+//    private static final String KWS_NEXT = "next";
+//    private static final String KWS_EXIT = "exit";
+//    private static final String KWS_QUIT = "quit";
+
+
+    private static SpeechRecognizer recognizer;*/
+
+   /* public void startRecognition() {
+
+        new AsyncTask<Void, Void, Exception>() {
+            @Override
+            protected Exception doInBackground(Void... params) {
+                try {
+                    Assets assets = new Assets(Game.this);
+                    File assetDir = assets.syncAssets();
+                    setupRecognizer(assetDir);
+                } catch (IOException e) {
+                    return e;
+                }
+                return null;
+            }
+
+            @Override
+            protected void onPostExecute(Exception result) {
+                if (result != null) {
+//                    Toast.makeText(Game.this, "Failed to make recognizer:" + result, Toast.LENGTH_LONG).show();
+                    Log.i(TAG, "Failed to make recognizer: " + result.toString());
+                } else {
+                    switchSearch(KWS_SEARCH);
+                }
+            }
+        }.execute();
+    }
+
+    @Override
+    public void onResult(Hypothesis hypothesis) {
+        Log.i(TAG, "onResult");
+        if (hypothesis != null) {
+            Log.i(TAG, "onResult: " + hypothesis.getHypstr());
+            String text = hypothesis.getHypstr();
+            if (text.equals(KWS_SAGITTAL)) {
+                Log.i(TAG, "press Q");
+                onKeyDown(KeyEvent.KEYCODE_Q, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Q));
+            } else if (text.equals(KWS_AXIAL)) {
+                onKeyDown(KeyEvent.KEYCODE_W, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_W));
+            } else if (text.equals(KWS_CORONAL)) {
+                onKeyDown(KeyEvent.KEYCODE_E, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_E));
+            } else if (text.equals(KWS_FULL)) {
+                onKeyDown(KeyEvent.KEYCODE_R, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_R));
+            }
+//            else if(text.equals(KWS_EXIT) || text.equals(KWS_QUIT)) {
+//                onKeyDown(KeyEvent.KEYCODE_T, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_T));
+//                exitApp();
+//            } else if(text.equals(KWS_NEXT)){
+//                conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_LEFT);
+//                conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_LEFT);
+//            }
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        if(recognizer != null){
+            recognizer.stop();
+        }
+        stopConnection();
+        super.onPause();
+    }
+
+    @Override
+    public void onBeginningOfSpeech() {
+        Log.i(TAG,"onBeginningOfSpeech()");
+    }
+
+    @Override
+    public void onEndOfSpeech() {
+        Log.i(TAG, "onEndOfSpeech()");
+        if (MENU_SEARCH.equals(recognizer.getSearchName()))
+            switchSearch(KWS_SEARCH);
+    }
+
+    @Override
+    public void onPartialResult(Hypothesis hypothesis) {
+        Log.i(TAG,"onPartialResult()");
+        String text = hypothesis.getHypstr();
+        if (hypothesis.getHypstr().equals(KEYPHRASE)) {
+            switchSearch(MENU_SEARCH);
+        } else if (hypothesis.getHypstr().equals(MENU_SEARCH)){
+            if (text.equals(KWS_SAGITTAL)) {
+                onKeyDown(KeyEvent.KEYCODE_Q, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Q));
+            } else if (text.equals(KWS_AXIAL)) {
+                onKeyDown(KeyEvent.KEYCODE_W, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_W));
+            } else if (text.equals(KWS_CORONAL)) {
+                onKeyDown(KeyEvent.KEYCODE_E, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_E));
+            } else if (text.equals(KWS_FULL)) {
+                onKeyDown(KeyEvent.KEYCODE_R, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_R));
+            }
+        }
+    }
+
+    private void switchSearch(String searchName) {
+        Log.i(TAG, "switchSearch");
+        if(recognizer != null){
+            recognizer.stop();
+            recognizer.startListening(searchName);
+        }
+    }
+
+    private void setupRecognizer(File assetsDir) {
+        File modelsDir = new File(assetsDir, "models");
+        float error = 1e-20f;
+        recognizer = defaultSetup()
+                .setAcousticModel(new File(modelsDir, "hmm/en-us-semi"))
+                .setDictionary(new File(modelsDir, "dict/cmu07a.dic"))
+                .setRawLogDir(assetsDir).setKeywordThreshold(error)
+                .getRecognizer();
+        recognizer.addListener(this);
+
+        // Create keyword-activation search.
+        recognizer.addKeyphraseSearch(KWS_SEARCH, KEYPHRASE);
+
+        // Create grammar-based searches.
+        File menuGrammar = new File(modelsDir, "grammar/menu.gram");
+        recognizer.addGrammarSearch(MENU_SEARCH, menuGrammar);
+    }*/
+
 }

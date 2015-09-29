@@ -23,6 +23,8 @@ public class ServerHelper {
                 computer.localIp : computer.remoteIp;
     }
 
+    public static final int APP_QUIT_REQUEST_CODE = 3;
+
     public static void doStart(Activity parent, NvApp app, ComputerDetails computer,
                                ComputerManagerService.ComputerManagerBinder managerBinder) {
         Intent intent = new Intent(parent, Game.class);
@@ -34,7 +36,7 @@ public class ServerHelper {
         intent.putExtra(Game.EXTRA_UNIQUEID, managerBinder.getUniqueId());
         intent.putExtra(Game.EXTRA_STREAMING_REMOTE,
                 computer.reachability != ComputerDetails.Reachability.LOCAL);
-        parent.startActivity(intent);
+        parent.startActivityForResult(intent,APP_QUIT_REQUEST_CODE);
     }
 
     public static void doQuit(final Activity parent,
