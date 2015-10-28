@@ -1,0 +1,11 @@
+#JSGF V1.0;
+
+grammar surgery;
+
+<surgery> = sagittal    |
+          axial         |
+          coronal       |
+          full          |
+          full screen;
+
+public <surgery> = <surgery>+;
