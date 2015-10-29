@@ -2,8 +2,7 @@
 
 grammar digits;
 
-<digit> = oh    |
-          zero  |
+<digit> = zero  |
           one   |
           two   |
           three |

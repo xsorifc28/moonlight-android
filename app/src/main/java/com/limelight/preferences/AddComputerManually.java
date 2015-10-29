@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Arrays;
 import java.util.Locale;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -23,6 +24,8 @@ import android.content.res.Configuration;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.inputmethod.EditorInfo;
@@ -43,7 +46,7 @@ public class AddComputerManually extends Activity implements RecognitionListener
     private static final String TAG = "AddComputerManually";
     private static final String TAG2 = TAG + "-Spx";
 
-    //private static String IP = "150.250.100.88";
+    private static String IP = "";
 
     //private static String IP = "10.0.1.16";
 
@@ -54,7 +57,6 @@ public class AddComputerManually extends Activity implements RecognitionListener
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, final IBinder binder) {
             managerBinder = ((ComputerManagerService.ComputerManagerBinder)binder);
-            //computersToAdd.add(IP);
             startAddThread();
         }
 
@@ -143,7 +145,7 @@ public class AddComputerManually extends Activity implements RecognitionListener
     @Override
     protected  void onResume() {
         super.onResume();
-        switchSearch(KWS_SEARCH);
+        switchSearch(KWS_START);
     }
 
     @Override
@@ -171,7 +173,11 @@ public class AddComputerManually extends Activity implements RecognitionListener
         super.onCreate(savedInstanceState);
 
         // Start pocket-sphinx
-        startRecognition();
+        if(!IP.equals("")) {
+            computersToAdd.add(IP);
+        } else {
+            startRecognition();
+        }
 
         String locale = PreferenceConfiguration.readPreferences(this).language;
         if (!locale.equals(PreferenceConfiguration.DEFAULT_LANGUAGE)) {
@@ -186,7 +192,23 @@ public class AddComputerManually extends Activity implements RecognitionListener
 
         hostText = (TextView) findViewById(R.id.hostTextView);
         hostText.setImeOptions(EditorInfo.IME_ACTION_DONE);
-        hostText.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+        hostText.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+
+            }
+
+            @Override
+            public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+
+            }
+
+            @Override
+            public void afterTextChanged(Editable editable) {
+                computersToAdd.add(hostText.getText().toString().trim());
+            }
+        });
+        /*hostText.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView textView, int actionId, KeyEvent keyEvent) {
                 if (actionId == EditorInfo.IME_ACTION_DONE ||
@@ -208,7 +230,7 @@ public class AddComputerManually extends Activity implements RecognitionListener
 
                 return false;
             }
-        });
+        });*/
 
         // Bind to the ComputerManager service
         bindService(new Intent(AddComputerManually.this,
@@ -216,10 +238,28 @@ public class AddComputerManually extends Activity implements RecognitionListener
     }
 
     // Pocket Sphinx enter ip
-    private static final String KWS_SEARCH = "wakeup";
+    private static final String KWS_START = "start";
+    private static final String KWS_CONFIRM = "confirm";
     private static final String DIGITS_SEARCH = "digits";
 
-    private static final String KEYPHRASE = "add";
+    private static final String KEYPHRASE = "add computer";
+    private static final String ONE = "one";
+    private static final String TWO = "two";
+    private static final String THREE = "three";
+    private static final String FOUR = "four";
+    private static final String FIVE = "five";
+    private static final String SIX = "six";
+    private static final String SEVEN = "seven";
+    private static final String EIGHT = "eight";
+    private static final String NINE = "nine";
+    private static final String ZERO = "zero";
+    private static final String DOT = "dot";
+    private static final String POINT = "point";
+
+    private static final String[] digits = new String[]{ONE, TWO, THREE, FOUR,
+                                                     FIVE, SIX, SEVEN, EIGHT,
+                                                     NINE, ZERO, DOT, POINT};
+
 
     private static SpeechRecognizer recognizer;
 
@@ -244,7 +284,7 @@ public class AddComputerManually extends Activity implements RecognitionListener
 //                    Toast.makeText(Game.this, "Failed to make recognizer:" + result, Toast.LENGTH_LONG).show();
                     Log.i(TAG2, "Failed to make recognizer: " + result.toString());
                 } else {
-                    switchSearch(KWS_SEARCH);
+                    switchSearch(KWS_START);
                 }
             }
         }.execute();
@@ -252,14 +292,14 @@ public class AddComputerManually extends Activity implements RecognitionListener
 
     @Override
     public void onBeginningOfSpeech() {
-        Log.i(TAG2,"onBeginningOfSpeech()");
+        Log.i(TAG2, "onBeginningOfSpeech()");
     }
 
     @Override
     public void onEndOfSpeech() {
         Log.i(TAG2, "onEndOfSpeech()");
-        if (recognizer.getSearchName().equals(DIGITS_SEARCH))
-            switchSearch(KWS_SEARCH);
+        if (DIGITS_SEARCH.equals(recognizer.getSearchName()))
+            switchSearch(KWS_START);
     }
 
     @Override
@@ -271,6 +311,8 @@ public class AddComputerManually extends Activity implements RecognitionListener
         Log.i(TAG2, "onPartialResult: " + text);
         if(text.equals(KEYPHRASE)) {
             switchSearch(DIGITS_SEARCH);
+        } else if(Arrays.asList(digits).contains(text)) {
+            Log.i(TAG2, "has numbers");
         }
     }
 
@@ -279,20 +321,54 @@ public class AddComputerManually extends Activity implements RecognitionListener
         hostText.setText("");
         if (hypothesis != null) {
             String text = hypothesis.getHypstr();
+            String ipText = "";
             Log.i(TAG2, "onResult: " + text);
-            Toast.makeText(getApplicationContext(), text, Toast.LENGTH_SHORT).show();
+            Toast.makeText(getApplicationContext(), "Processing numbers", Toast.LENGTH_SHORT).show();
+            String[] ipString = text.split(" ");
+            for (String anIpString : ipString) {
+                if (anIpString.equals(ONE)) {
+                    ipText += "1";
+                } else if (anIpString.equals(TWO)) {
+                    ipText += "2";
+                } else if (anIpString.equals(THREE)) {
+                    ipText += "3";
+                } else if (anIpString.equals(FOUR)) {
+                    ipText += "4";
+                } else if (anIpString.equals(FIVE)) {
+                    ipText += "5";
+                } else if (anIpString.equals(SIX)) {
+                    ipText += "6";
+                } else if (anIpString.equals(SEVEN)) {
+                    ipText += "7";
+                } else if (anIpString.equals(EIGHT)) {
+                    ipText += "8";
+                } else if (anIpString.equals(NINE)) {
+                    ipText += "9";
+                } else if (anIpString.equals(ZERO)) {
+                    ipText += "0";
+                } else if (anIpString.equals(DOT)) {
+                    ipText += ".";
+                } else if (anIpString.equals(POINT)) {
+                    ipText += ".";
+                }
+            }
+            Toast.makeText(getApplicationContext(), ipText, Toast.LENGTH_SHORT).show();
+            hostText.setText(ipText);
+
         }
     }
 
     @Override
     public void onError(Exception e) {
         Log.i(TAG2, "PocketSphinx/onError: " + e.getMessage());
+        recognizer.stop();
+        recognizer.startListening(KWS_START);
     }
 
     @Override
     public void onTimeout() {
         Log.i(TAG2, "PocketSphinx/onTimeout: ");
-        switchSearch(KWS_SEARCH);
+        switchSearch(KWS_START);
     }
 
     private void switchSearch(String searchName) {
@@ -318,7 +394,7 @@ public class AddComputerManually extends Activity implements RecognitionListener
         recognizer.addListener(this);
 
         // Create keyword-activation search.
-        recognizer.addKeyphraseSearch(KWS_SEARCH, KEYPHRASE);
+        recognizer.addKeyphraseSearch(KWS_START, KEYPHRASE);
 
         // Create grammar-based searches.
         File digitsGrammar = new File(modelsDir, "grammar/digits.gram");
