@@ -1,6 +1,7 @@
 package com.limelight;
 
 import com.google.android.glass.media.Sounds;
+
 import com.limelight.binding.PlatformBinding;
 import com.limelight.binding.input.ControllerHandler;
 import com.limelight.binding.input.KeyboardTranslator;
@@ -75,6 +76,9 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     // Only 2 touches are supported
     private final TouchContext[] touchContextMap = new TouchContext[2];
     private long threeFingerDownTime = 0;
+
+    private static final double REFERENCE_HORIZ_RES = 1280;
+    private static final double REFERENCE_VERT_RES = 720;
 
     private static final int THREE_FINGER_TAP_THRESHOLD = 300;
 
@@ -241,8 +245,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         // Initialize touch contexts
         for (int i = 0; i < touchContextMap.length; i++) {
             touchContextMap[i] = new TouchContext(conn, i,
-                    ((double)prefConfig.width / (double)screenSize.x),
-                    ((double)prefConfig.height / (double)screenSize.y));
+                    (REFERENCE_HORIZ_RES / (double)screenSize.x),
+                    (REFERENCE_VERT_RES / (double)screenSize.y));
         }
 
         if (LimelightBuildProps.ROOT_BUILD) {
@@ -576,9 +580,56 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         }
         else if ((event.getSource() & InputDevice.SOURCE_CLASS_POINTER) != 0)
         {
+            // This case is for mice
+            if (event.getSource() == InputDevice.SOURCE_MOUSE)
+            {
+                int changedButtons = event.getButtonState() ^ lastButtonState;
+
+                if (event.getActionMasked() == MotionEvent.ACTION_SCROLL) {
+                    // Send the vertical scroll packet
+                    byte vScrollClicks = (byte) event.getAxisValue(MotionEvent.AXIS_VSCROLL);
+                    conn.sendMouseScroll(vScrollClicks);
+                }
+
+                if ((changedButtons & MotionEvent.BUTTON_PRIMARY) != 0) {
+                    if ((event.getButtonState() & MotionEvent.BUTTON_PRIMARY) != 0) {
+                        conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_LEFT);
+                    }
+                    else {
+                        conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_LEFT);
+                    }
+                }
+
+                if ((changedButtons & MotionEvent.BUTTON_SECONDARY) != 0) {
+                    if ((event.getButtonState() & MotionEvent.BUTTON_SECONDARY) != 0) {
+                        conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_RIGHT);
+                    }
+                    else {
+                        conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_RIGHT);
+                    }
+                }
+
+                if ((changedButtons & MotionEvent.BUTTON_TERTIARY) != 0) {
+                    if ((event.getButtonState() & MotionEvent.BUTTON_TERTIARY) != 0) {
+                        conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_MIDDLE);
+                    }
+                    else {
+                        conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_MIDDLE);
+                    }
+                }
+
+                // First process the history
+                for (int i = 0; i < event.getHistorySize(); i++) {
+                    updateMousePosition((int)event.getHistoricalX(i), (int)event.getHistoricalY(i));
+                }
+
+                // Now process the current values
+                updateMousePosition((int)event.getX(), (int)event.getY());
+
+                lastButtonState = event.getButtonState();
+            }
             // This case is for touch-based input devices
-            if (event.getSource() == InputDevice.SOURCE_TOUCHSCREEN ||
-                    event.getSource() == InputDevice.SOURCE_STYLUS)
+            else
             {
                 int actionIndex = event.getActionIndex();
 
@@ -657,59 +708,6 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                     return false;
                 }
             }
-            // This case is for mice
-            else if (event.getSource() == InputDevice.SOURCE_MOUSE)
-            {
-                int changedButtons = event.getButtonState() ^ lastButtonState;
-
-                if (event.getActionMasked() == MotionEvent.ACTION_SCROLL) {
-                    // Send the vertical scroll packet
-                    byte vScrollClicks = (byte) event.getAxisValue(MotionEvent.AXIS_VSCROLL);
-                    conn.sendMouseScroll(vScrollClicks);
-                }
-
-                if ((changedButtons & MotionEvent.BUTTON_PRIMARY) != 0) {
-                    if ((event.getButtonState() & MotionEvent.BUTTON_PRIMARY) != 0) {
-                        conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_LEFT);
-                    }
-                    else {
-                        conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_LEFT);
-                    }
-                }
-
-                if ((changedButtons & MotionEvent.BUTTON_SECONDARY) != 0) {
-                    if ((event.getButtonState() & MotionEvent.BUTTON_SECONDARY) != 0) {
-                        conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_RIGHT);
-                    }
-                    else {
-                        conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_RIGHT);
-                    }
-                }
-
-                if ((changedButtons & MotionEvent.BUTTON_TERTIARY) != 0) {
-                    if ((event.getButtonState() & MotionEvent.BUTTON_TERTIARY) != 0) {
-                        conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_MIDDLE);
-                    }
-                    else {
-                        conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_MIDDLE);
-                    }
-                }
-
-                // First process the history
-                for (int i = 0; i < event.getHistorySize(); i++) {
-                    updateMousePosition((int)event.getHistoricalX(i), (int)event.getHistoricalY(i));
-                }
-
-                // Now process the current values
-                updateMousePosition((int)event.getX(), (int)event.getY());
-
-                lastButtonState = event.getButtonState();
-            }
-            else
-            {
-                // Unknown source
-                return false;
-            }
 
             // Handled a known source
             return true;
@@ -743,8 +741,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
             // Scale the deltas if the device resolution is different
             // than the stream resolution
-            deltaX = (int)Math.round((double)deltaX * ((double)prefConfig.width / (double)screenSize.x));
-            deltaY = (int)Math.round((double)deltaY * ((double)prefConfig.height / (double)screenSize.y));
+            deltaX = (int)Math.round((double)deltaX * (REFERENCE_HORIZ_RES / (double)screenSize.x));
+            deltaY = (int)Math.round((double)deltaY * (REFERENCE_VERT_RES / (double)screenSize.y));
 
             conn.sendMouseMove((short)deltaX, (short)deltaY);
         }

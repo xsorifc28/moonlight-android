@@ -54,7 +54,7 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
     private RelativeLayout noPcFoundLayout;
     private PcGridAdapter pcGridAdapter;
     private ComputerManagerService.ComputerManagerBinder managerBinder;
-    private boolean freezeUpdates, runningPolling;
+    private boolean freezeUpdates, runningPolling, hasResumed;
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, IBinder binder) {
             final ComputerManagerService.ComputerManagerBinder localBinder =
@@ -267,6 +267,7 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
     protected void onResume() {
         super.onResume();
 
+        hasResumed = true;
         startComputerUpdates();
 
         startFirstComputer();
@@ -277,6 +278,7 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
     protected void onPause() {
         super.onPause();
 
+        hasResumed = false;
         stopComputerUpdates(false);
     }
 
@@ -302,13 +304,10 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
                 
         AdapterContextMenuInfo info = (AdapterContextMenuInfo) menuInfo;
         ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(info.position);
-        if (computer.details.reachability == ComputerDetails.Reachability.UNKNOWN) {
-            startComputerUpdates();
-            return;
-        }
-        
+
         // Inflate the context menu
-        if (computer.details.reachability == ComputerDetails.Reachability.OFFLINE) {
+        if (computer.details.reachability == ComputerDetails.Reachability.OFFLINE ||
+            computer.details.reachability == ComputerDetails.Reachability.UNKNOWN) {
             menu.add(Menu.NONE, WOL_ID, 1, getResources().getString(R.string.pcview_menu_send_wol));
             menu.add(Menu.NONE, DELETE_ID, 2, getResources().getString(R.string.pcview_menu_delete_pc));
         }
@@ -332,7 +331,11 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
 
     @Override
     public void onContextMenuClosed(Menu menu) {
-        startComputerUpdates();
+        // For some reason, this gets called again _after_ onPause() is called on this activity.
+        // We don't want to start computer updates again, so we need to keep track of whether we're paused.
+        if (hasResumed) {
+            startComputerUpdates();
+        }
     }
 
     private void doPair(final ComputerDetails computer) {
@@ -439,7 +442,7 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
     }
 
     private void doWakeOnLan(final ComputerDetails computer) {
-        if (computer.reachability != ComputerDetails.Reachability.OFFLINE) {
+        if (computer.state == ComputerDetails.State.ONLINE) {
             Toast.makeText(PcView.this, getResources().getString(R.string.wol_pc_online), Toast.LENGTH_SHORT).show();
             return;
         }
@@ -675,10 +678,9 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
             public void onItemClick(AdapterView<?> arg0, View arg1, int pos,
                                     long id) {
                 ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(pos);
-                if (computer.details.reachability == ComputerDetails.Reachability.UNKNOWN) {
-                    // Do nothing
-                } else if (computer.details.reachability == ComputerDetails.Reachability.OFFLINE) {
-                    // Open the context menu if a PC is offline
+                if (computer.details.reachability == ComputerDetails.Reachability.UNKNOWN ||
+                    computer.details.reachability == ComputerDetails.Reachability.OFFLINE) {
+                    // Open the context menu if a PC is offline or refreshing
                     openContextMenu(arg1);
                 } else if (computer.details.pairState != PairState.PAIRED) {
                     // Pair an unpaired machine by default

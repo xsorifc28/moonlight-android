@@ -4,6 +4,7 @@ import java.nio.ByteBuffer;
 import java.util.Locale;
 import java.util.concurrent.locks.LockSupport;
 
+import org.jcodec.codecs.h264.H264Utils;
 import org.jcodec.codecs.h264.io.model.SeqParameterSet;
 import org.jcodec.codecs.h264.io.model.VUIParameters;
 
@@ -30,6 +31,7 @@ public class MediaCodecDecoderRenderer extends EnhancedDecoderRenderer {
     private final boolean needsSpsBitstreamFixup, isExynos4;
     private VideoDepacketizer depacketizer;
     private final boolean adaptivePlayback, directSubmit;
+    private final boolean constrainedHighProfile;
     private int initialWidth, initialHeight;
 
     private boolean needsBaselineSpsHack;
@@ -55,7 +57,8 @@ public class MediaCodecDecoderRenderer extends EnhancedDecoderRenderer {
         if (decoder == null) {
             // This case is handled later in setup()
             needsSpsBitstreamFixup = isExynos4 =
-            adaptivePlayback = directSubmit = false;
+            adaptivePlayback = directSubmit =
+            constrainedHighProfile = false;
             return;
         }
 
@@ -66,12 +69,16 @@ public class MediaCodecDecoderRenderer extends EnhancedDecoderRenderer {
         adaptivePlayback = MediaCodecHelper.decoderSupportsAdaptivePlayback(decoderName, decoder);
         needsSpsBitstreamFixup = MediaCodecHelper.decoderNeedsSpsBitstreamRestrictions(decoderName, decoder);
         needsBaselineSpsHack = MediaCodecHelper.decoderNeedsBaselineSpsHack(decoderName, decoder);
+        constrainedHighProfile = MediaCodecHelper.decoderNeedsConstrainedHighProfile(decoderName, decoder);
         isExynos4 = MediaCodecHelper.isExynos4Device();
         if (needsSpsBitstreamFixup) {
             LimeLog.info("Decoder "+decoderName+" needs SPS bitstream restrictions fixup");
         }
         if (needsBaselineSpsHack) {
             LimeLog.info("Decoder "+decoderName+" needs baseline SPS hack");
+        }
+        if (constrainedHighProfile) {
+            LimeLog.info("Decoder "+decoderName+" needs constrained high profile");
         }
         if (isExynos4) {
             LimeLog.info("Decoder "+decoderName+" is on Exynos 4");
@@ -412,6 +419,23 @@ public class MediaCodecDecoderRenderer extends EnhancedDecoderRenderer {
         return buf;
     }
 
+    private void doProfileSpecificSpsPatching(SeqParameterSet sps) {
+        // Some devices benefit from setting constraint flags 4 & 5 to make this Constrained
+        // High Profile which allows the decoder to assume there will be no B-frames and
+        // reduce delay and buffering accordingly. Some devices (Marvell, Exynos 4) don't
+        // like it so we only set them on devices that are confirmed to benefit from it.
+        if (sps.profile_idc == 100 && constrainedHighProfile) {
+            LimeLog.info("Setting constraint set flags for constrained high profile");
+            sps.constraint_set_4_flag = true;
+            sps.constraint_set_5_flag = true;
+        }
+        else {
+            // Force the constraints unset otherwise (some may be set by default)
+            sps.constraint_set_4_flag = false;
+            sps.constraint_set_5_flag = false;
+        }
+    }
+
     @SuppressWarnings("deprecation")
     private void submitDecodeUnit(DecodeUnit decodeUnit, int inputBufferIndex) {
         long timestampUs = System.nanoTime() / 1000;
@@ -446,7 +470,9 @@ public class MediaCodecDecoderRenderer extends EnhancedDecoderRenderer {
                 // Skip to the start of the NALU data
                 spsBuf.position(header.offset+5);
 
-                SeqParameterSet sps = SeqParameterSet.read(spsBuf);
+                // The H264Utils.readSPS function safely handles
+                // Annex B NALUs (including NALUs with escape sequences)
+                SeqParameterSet sps = H264Utils.readSPS(spsBuf);
 
                 // Some decoders rely on H264 level to decide how many buffers are needed
                 // Since we only need one frame buffered, we'll set the level as low as we can
@@ -476,12 +502,7 @@ public class MediaCodecDecoderRenderer extends EnhancedDecoderRenderer {
                 // Some devices don't like these so we remove them here.
                 sps.vuiParams.video_signal_type_present_flag = false;
                 sps.vuiParams.colour_description_present_flag = false;
-                sps.vuiParams.colour_primaries = 2;
-                sps.vuiParams.transfer_characteristics = 2;
-                sps.vuiParams.matrix_coefficients = 2;
                 sps.vuiParams.chroma_loc_info_present_flag = false;
-                sps.vuiParams.chroma_sample_loc_type_bottom_field = 0;
-                sps.vuiParams.chroma_sample_loc_type_top_field = 0;
 
                 if (needsSpsBitstreamFixup || isExynos4) {
                     // The SPS that comes in the current H264 bytestream doesn't set bitstream_restriction_flag
@@ -524,11 +545,16 @@ public class MediaCodecDecoderRenderer extends EnhancedDecoderRenderer {
                     savedSps = sps;
                 }
 
+                // Patch the SPS constraint flags
+                doProfileSpecificSpsPatching(sps);
+
                 // Write the annex B header
                 buf.put(header.data, header.offset, 5);
 
-                // Write the modified SPS to the input buffer
-                sps.write(buf);
+                // The H264Utils.writeSPS function safely handles
+                // Annex B NALUs (including NALUs with escape sequences)
+                ByteBuffer escapedNalu = H264Utils.writeSPS(sps, header.length);
+                buf.put(escapedNalu);
 
                 queueInputBuffer(inputBufferIndex,
                         0, buf.position(),
@@ -575,6 +601,9 @@ public class MediaCodecDecoderRenderer extends EnhancedDecoderRenderer {
 
         // Switch the H264 profile back to high
         savedSps.profile_idc = 100;
+
+        // Patch the SPS constraint flags
+        doProfileSpecificSpsPatching(savedSps);
 
         // Write the SPS data
         savedSps.write(inputBuffer);
@@ -681,6 +710,8 @@ public class MediaCodecDecoderRenderer extends EnhancedDecoderRenderer {
             str += "Initial video dimensions: "+renderer.initialWidth+"x"+renderer.initialHeight+"\n";
             str += "In stats: "+renderer.numSpsIn+", "+renderer.numPpsIn+", "+renderer.numIframeIn+"\n";
             str += "Total frames: "+renderer.totalFrames+"\n";
+            str += "Average end-to-end client latency: "+getAverageEndToEndLatency()+"ms\n";
+            str += "Average hardware decoder latency: "+getAverageDecoderLatency()+"ms\n";
 
             if (currentBuffer != null) {
                 str += "Current buffer: ";

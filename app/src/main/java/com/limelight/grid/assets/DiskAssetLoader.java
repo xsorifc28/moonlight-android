@@ -13,6 +13,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 public class DiskAssetLoader {
+    // 5 MB
+    private final long MAX_ASSET_SIZE = 5 * 1024 * 1024;
+
     private final File cacheDir;
 
     public DiskAssetLoader(File cacheDir) {
@@ -27,13 +30,19 @@ public class DiskAssetLoader {
         InputStream in = null;
         Bitmap bmp = null;
         try {
+            // Make sure the cached asset doesn't exceed the maximum size
+            if (CacheHelper.getFileSize(cacheDir, "boxart", tuple.computer.uuid.toString(), tuple.app.getAppId() + ".png") > MAX_ASSET_SIZE) {
+                LimeLog.warning("Removing cached tuple exceeding size threshold: "+tuple);
+                CacheHelper.deleteCacheFile(cacheDir, "boxart", tuple.computer.uuid.toString(), tuple.app.getAppId() + ".png");
+                return null;
+            }
+
             in = CacheHelper.openCacheFileForInput(cacheDir, "boxart", tuple.computer.uuid.toString(), tuple.app.getAppId() + ".png");
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inSampleSize = sampleSize;
+            options.inPreferredConfig = Bitmap.Config.RGB_565;
             bmp = BitmapFactory.decodeStream(in, null, options);
-        } catch (FileNotFoundException ignored) {
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (IOException ignored) {
         } finally {
             if (in != null) {
                 try {
@@ -51,9 +60,11 @@ public class DiskAssetLoader {
 
     public void populateCacheWithStream(CachedAppAssetLoader.LoaderTuple tuple, InputStream input) {
         OutputStream out = null;
+        boolean success = false;
         try {
             out = CacheHelper.openCacheFileForOutput(cacheDir, "boxart", tuple.computer.uuid.toString(), tuple.app.getAppId() + ".png");
-            CacheHelper.writeInputStreamToOutputStream(input, out);
+            CacheHelper.writeInputStreamToOutputStream(input, out, MAX_ASSET_SIZE);
+            success = true;
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
@@ -61,6 +72,11 @@ public class DiskAssetLoader {
                 try {
                     out.close();
                 } catch (IOException ignored) {}
+            }
+
+            if (!success) {
+                LimeLog.warning("Unable to populate cache with tuple: "+tuple);
+                CacheHelper.deleteCacheFile(cacheDir, "boxart", tuple.computer.uuid.toString(), tuple.app.getAppId() + ".png");
             }
         }
     }

@@ -11,8 +11,8 @@ android {
         minSdkVersion 16
         targetSdkVersion 19
 
-        versionName "3.1.9"
-        versionCode 64
+        versionName "3.1.11"
+        versionCode = 66
     }
 
     productFlavors {
@@ -83,8 +83,6 @@ preBuild.dependsOn(list, checksum)
 clean.dependsOn(clean_assets)
 
 dependencies {
-    compile group: 'org.jcodec', name: 'jcodec', version: '0.1.9'
-
     compile group: 'org.bouncycastle', name: 'bcprov-jdk15on', version: '1.52'
     compile group: 'org.bouncycastle', name: 'bcpkix-jdk15on', version: '1.52'
 
@@ -101,4 +99,5 @@ dependencies {
     compile fileTree(dir: 'libs', include: '*.jar')
 
 
+    compile files('libs/jcodec-0.1.9-patched.jar')
 }
