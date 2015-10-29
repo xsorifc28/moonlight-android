@@ -1220,15 +1220,19 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             Log.i(TAG2, "onResult: " + text);
             if (text.equals(KWS_SAGITTAL)) {
                 Log.i(TAG2, "press W");
+                Toast.makeText(Game.this,"Sagittal",Toast.LENGTH_SHORT).show();
                 onKeyDown(KeyEvent.KEYCODE_W, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_W));
             } else if (text.equals(KWS_AXIAL)) {
                 Log.i(TAG2, "press Q");
+                Toast.makeText(Game.this,"Axial",Toast.LENGTH_SHORT).show();
                 onKeyDown(KeyEvent.KEYCODE_Q, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Q));
             } else if (text.equals(KWS_CORONAL)) {
                 Log.i(TAG2, "press E");
+                Toast.makeText(Game.this,"Coronal",Toast.LENGTH_SHORT).show();
                 onKeyDown(KeyEvent.KEYCODE_E, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_E));
             } else if (text.equals(KWS_FULL)) {
                 Log.i(TAG2, "press R");
+                Toast.makeText(Game.this,"Full Screen",Toast.LENGTH_SHORT).show();
                 onKeyDown(KeyEvent.KEYCODE_R, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_R));
             }
 //            else if(text.equals(KWS_EXIT) || text.equals(KWS_QUIT)) {
@@ -1280,7 +1284,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             Log.i(TAG2, "onPartialResult: " + text);
             if (text.equals(KEYPHRASE)) {
                 switchSearch(MENU_SEARCH);
-            } else if (text.equals(MENU_SEARCH)) {
+                Toast.makeText(Game.this,"Switch to...",Toast.LENGTH_SHORT).show();
+            } /*else if (text.equals(MENU_SEARCH)) {
                 if (text.equals(KWS_SAGITTAL)) {
                     onKeyDown(KeyEvent.KEYCODE_Q, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Q));
                 } else if (text.equals(KWS_AXIAL)) {
@@ -1290,7 +1295,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 } else if (text.equals(KWS_FULL)) {
                     onKeyDown(KeyEvent.KEYCODE_R, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_R));
                 }
-            }
+            }*/
         }
     }
 
@@ -1321,10 +1326,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
         // Create grammar-based searches.
         File menuGrammar = new File(modelsDir, "grammar/menu.gram");
-        File digitsGrammar = new File(modelsDir, "grammar/digits.gram");
         recognizer.addGrammarSearch(MENU_SEARCH, menuGrammar);
 
-        recognizer.addGrammarSearch(MENU_SEARCH, digitsGrammar);
     }
 
 }

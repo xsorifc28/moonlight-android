@@ -95,9 +95,9 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
 
     // Added by Dillon and Samed
     public void startFirstApp() {
-        if(appGridAdapter != null && appGridAdapter.getCount() > 0){
+        /*if(appGridAdapter != null && appGridAdapter.getCount() > 0){
             doQuit();
-        }
+        }*/
         firstAppHandler = new Handler();
         firstAppHandler.postDelayed(startFirstAppRunnable, 3000);
     }
