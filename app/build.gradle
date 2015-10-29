@@ -12,7 +12,7 @@ android {
         targetSdkVersion 19
 
         versionName "3.1.11"
-        versionCode = 66
+        versionCode 66
     }
 
     productFlavors {
@@ -56,25 +56,9 @@ android {
         }
     }
 
-    task copyJniLibs(type: Copy) {
-        from 'libs/armeabi'
-        into 'src/main/jniLibs/armeabi'
-    }
-
-    task copyJniLibs2(type: Copy) {
-        from 'libs/armeabi-v7a'
-        into 'src/main/jniLibs/armeabi-v7a'
-    }
-
-    copyJniLibs.dependsOn 'ndkBuild'
-    copyJniLibs2.dependsOn 'copyJniLibs'
-
-    /*tasks.withType(JavaCompile) {
-        compileTask -> compileTask.dependsOn ndkBuild
-    }*/
 
     tasks.withType(JavaCompile) {
-        compileTask -> compileTask.dependsOn copyJniLibs2
+        compileTask -> compileTask.dependsOn ndkBuild
     }
 }
 
