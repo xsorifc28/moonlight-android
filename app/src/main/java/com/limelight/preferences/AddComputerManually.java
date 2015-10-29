@@ -1,5 +1,7 @@
 package com.limelight.preferences;
 
+import java.io.File;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Locale;
@@ -18,19 +20,32 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.res.Configuration;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.TextView;
 import android.widget.Toast;
 
-public class AddComputerManually extends Activity {
+import edu.cmu.pocketsphinx.Assets;
+import edu.cmu.pocketsphinx.Hypothesis;
+import edu.cmu.pocketsphinx.RecognitionListener;
+import edu.cmu.pocketsphinx.SpeechRecognizer;
 
-    //private static String IP = "150.250.143.118";
+import static edu.cmu.pocketsphinx.SpeechRecognizerSetup.defaultSetup;
 
-    private static String IP = "10.0.1.16";
+
+public class AddComputerManually extends Activity implements RecognitionListener {
+
+    private static final String TAG = "AddComputerManually";
+    private static final String TAG2 = TAG + "-Spx";
+
+    //private static String IP = "150.250.100.88";
+
+    //private static String IP = "10.0.1.16";
 
     private TextView hostText;
     private ComputerManagerService.ComputerManagerBinder managerBinder;
@@ -39,12 +54,8 @@ public class AddComputerManually extends Activity {
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, final IBinder binder) {
             managerBinder = ((ComputerManagerService.ComputerManagerBinder)binder);
-            computersToAdd.add(IP);
+            //computersToAdd.add(IP);
             startAddThread();
-            //doAddPc(IP);
-
-            //startFirstComputer();
-
         }
 
         public void onServiceDisconnected(ComponentName className) {
@@ -103,7 +114,6 @@ public class AddComputerManually extends Activity {
                     } catch (InterruptedException e) {
                         return;
                     }
-                    //doAddPc(IP);
                     doAddPc(computer);
                 }
             }
@@ -125,6 +135,18 @@ public class AddComputerManually extends Activity {
     }
 
     @Override
+    protected void onPause() {
+        super.onPause();
+        recognizer.cancel();
+    }
+
+    @Override
+    protected  void onResume() {
+        super.onResume();
+        switchSearch(KWS_SEARCH);
+    }
+
+    @Override
     protected void onStop() {
         super.onStop();
 
@@ -135,6 +157,8 @@ public class AddComputerManually extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        recognizer.cancel();
+        recognizer.shutdown();
 
         if (managerBinder != null) {
             joinAddThread();
@@ -145,6 +169,9 @@ public class AddComputerManually extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Start pocket-sphinx
+        startRecognition();
 
         String locale = PreferenceConfiguration.readPreferences(this).language;
         if (!locale.equals(PreferenceConfiguration.DEFAULT_LANGUAGE)) {
@@ -157,7 +184,7 @@ public class AddComputerManually extends Activity {
 
         UiHelper.notifyNewRootView(this);
 
-        this.hostText = (TextView) findViewById(R.id.hostTextView);
+        hostText = (TextView) findViewById(R.id.hostTextView);
         hostText.setImeOptions(EditorInfo.IME_ACTION_DONE);
         hostText.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
@@ -172,10 +199,9 @@ public class AddComputerManually extends Activity {
                     }
 
                     computersToAdd.add(hostText.getText().toString().trim());
-                }
-                else if (actionId == EditorInfo.IME_ACTION_PREVIOUS) {
+                } else if (actionId == EditorInfo.IME_ACTION_PREVIOUS) {
                     // This is how the Fire TV dismisses the keyboard
-                    InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+                    InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
                     imm.hideSoftInputFromWindow(hostText.getWindowToken(), 0);
                     return false;
                 }
@@ -186,6 +212,118 @@ public class AddComputerManually extends Activity {
 
         // Bind to the ComputerManager service
         bindService(new Intent(AddComputerManually.this,
-                    ComputerManagerService.class), serviceConnection, Service.BIND_AUTO_CREATE);
+                ComputerManagerService.class), serviceConnection, Service.BIND_AUTO_CREATE);
     }
+
+    // Pocket Sphinx enter ip
+    private static final String KWS_SEARCH = "wakeup";
+    private static final String DIGITS_SEARCH = "digits";
+
+    private static final String KEYPHRASE = "add";
+
+    private static SpeechRecognizer recognizer;
+
+    public void startRecognition() {
+
+        new AsyncTask<Void, Void, Exception>() {
+            @Override
+            protected Exception doInBackground(Void... params) {
+                try {
+                    Assets assets = new Assets(AddComputerManually.this);
+                    File assetDir = assets.syncAssets();
+                    setupRecognizer(assetDir);
+                } catch (IOException e) {
+                    return e;
+                }
+                return null;
+            }
+
+            @Override
+            protected void onPostExecute(Exception result) {
+                if (result != null) {
+//                    Toast.makeText(Game.this, "Failed to make recognizer:" + result, Toast.LENGTH_LONG).show();
+                    Log.i(TAG2, "Failed to make recognizer: " + result.toString());
+                } else {
+                    switchSearch(KWS_SEARCH);
+                }
+            }
+        }.execute();
+    }
+
+    @Override
+    public void onBeginningOfSpeech() {
+        Log.i(TAG2,"onBeginningOfSpeech()");
+    }
+
+    @Override
+    public void onEndOfSpeech() {
+        Log.i(TAG2, "onEndOfSpeech()");
+        if (recognizer.getSearchName().equals(DIGITS_SEARCH))
+            switchSearch(KWS_SEARCH);
+    }
+
+    @Override
+    public void onPartialResult(Hypothesis hypothesis) {
+        if (hypothesis == null)
+            return;
+
+        String text = hypothesis.getHypstr();
+        Log.i(TAG2, "onPartialResult: " + text);
+        if(text.equals(KEYPHRASE)) {
+            switchSearch(DIGITS_SEARCH);
+        }
+    }
+
+    @Override
+    public void onResult(Hypothesis hypothesis) {
+        hostText.setText("");
+        if (hypothesis != null) {
+            String text = hypothesis.getHypstr();
+            Log.i(TAG2, "onResult: " + text);
+            Toast.makeText(getApplicationContext(), text, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    public void onError(Exception e) {
+        Log.i(TAG2, "PocketSphinx/onError: " + e.getMessage());
+    }
+
+    @Override
+    public void onTimeout() {
+        Log.i(TAG2, "PocketSphinx/onTimeout: ");
+        switchSearch(KWS_SEARCH);
+    }
+
+    private void switchSearch(String searchName) {
+        Log.i(TAG2, "switch Search to " + searchName);
+        if(recognizer != null){
+            recognizer.stop();
+            recognizer.startListening(searchName);
+        }
+    }
+
+    private void setupRecognizer(File assetsDir) {
+        File modelsDir = new File(assetsDir, "models");
+        float error = 1e-20f;
+        try {
+            recognizer = defaultSetup()
+                    .setAcousticModel(new File(modelsDir, "hmm/en-us-semi"))
+                    .setDictionary(new File(modelsDir, "dict/cmu07a.dic"))
+                    .setRawLogDir(assetsDir).setKeywordThreshold(error)
+                    .getRecognizer();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        recognizer.addListener(this);
+
+        // Create keyword-activation search.
+        recognizer.addKeyphraseSearch(KWS_SEARCH, KEYPHRASE);
+
+        // Create grammar-based searches.
+        File digitsGrammar = new File(modelsDir, "grammar/digits.gram");
+        recognizer.addGrammarSearch(DIGITS_SEARCH, digitsGrammar);
+    }
+
+
 }

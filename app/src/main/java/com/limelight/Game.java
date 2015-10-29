@@ -1,7 +1,5 @@
 package com.limelight;
 
-import com.google.android.glass.media.Sounds;
-
 import com.limelight.binding.PlatformBinding;
 import com.limelight.binding.input.ControllerHandler;
 import com.limelight.binding.input.KeyboardTranslator;
@@ -32,13 +30,11 @@ import android.hardware.input.InputManager;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.net.wifi.WifiManager;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Message;
 import android.os.SystemClock;
-import android.speech.RecognitionListener;
-import android.speech.RecognizerIntent;
-import android.speech.SpeechRecognizer;
+
 import android.util.Log;
 import android.view.Display;
 import android.view.InputDevice;
@@ -56,18 +52,33 @@ import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Toast;
 
-import java.util.ArrayList;
+import java.io.File;
+import java.io.IOException;
 import java.util.Locale;
 
+import edu.cmu.pocketsphinx.Assets;
+import edu.cmu.pocketsphinx.Hypothesis;
+import edu.cmu.pocketsphinx.SpeechRecognizer;
 
+// Native SpeechRecognizer
+/*import com.google.android.glass.media.Sounds;
+import android.os.Message;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
+import java.util.ArrayList;*/
+
+import static edu.cmu.pocketsphinx.SpeechRecognizerSetup.defaultSetup;
 
 
 public class Game extends Activity implements SurfaceHolder.Callback,
     OnGenericMotionListener, OnTouchListener, NvConnectionListener, EvdevListener,
-    OnSystemUiVisibilityChangeListener, GameGestures
+    OnSystemUiVisibilityChangeListener, GameGestures, edu.cmu.pocketsphinx.RecognitionListener
         //, RecognitionListener
 {
     private static final String TAG = "Game";
+    private static final String TAG2 = "Game-PocketSphinx";
+
 
     private int lastMouseX = Integer.MIN_VALUE;
     private int lastMouseY = Integer.MIN_VALUE;
@@ -111,8 +122,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     public static final String EXTRA_UNIQUEID = "UniqueId";
     public static final String EXTRA_STREAMING_REMOTE = "Remote";
 
-    private SpeechRecognizer mSpeechRecognizer;
-    private Intent mSpeechIntent;
+    //private SpeechRecognizer mSpeechRecognizer;
+    //private Intent mSpeechIntent;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -126,13 +137,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         }
 
 
-       createListener();
-        startListener();
+        //createListener();
+        //startListener();
 
         // Start acquiring the voice recognizer
-        //startRecognition();
-
-        //getWindow().requestFeature(WindowUtils.FEATURE_VOICE_COMMANDS);
+        startRecognition();
 
         // We don't want a title bar
         requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -349,10 +358,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (mSpeechRecognizer != null)
-        {
-            mSpeechRecognizer.destroy();
-        }
+        //destroyListener();
         wifiLock.release();
     }
 
@@ -461,6 +467,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             //quit
             Intent data = new Intent();
             data.putExtra("manualQuit",true);
+            Log.i(TAG,"manualQuit");
             setResult(ServerHelper.APP_QUIT_REQUEST_CODE, data);
             exitApp();
         }
@@ -959,7 +966,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         onStop();
     }
 
-    public void createListener() {
+    /*public void createListener() {
         mSpeechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
         AbstractMainRecognitionListener mRecognitionListener = new AbstractMainRecognitionListener();
         mSpeechRecognizer.setRecognitionListener(mRecognitionListener);
@@ -973,13 +980,13 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         mSpeechRecognizer.startListening(mSpeechIntent);
     }
     public void destroyListener() {
-        mSpeechRecognizer.cancel();
-//        mSpeechRecognizer.stopListening();
-        mSpeechRecognizer.destroy();
+        if(mSpeechRecognizer != null) {
+          mSpeechRecognizer.cancel();
+          mSpeechRecognizer.destroy();
+        }
     }
     public void restartListener() {
         mSpeechRecognizer.cancel();
-//        mSpeechRecognizer.stopListening();
         Handler handler = new Handler( new Handler.Callback() {
             @Override
             public boolean handleMessage(Message msg) {
@@ -992,7 +999,6 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     }
     public void replaceListener() {
         mSpeechRecognizer.cancel();
-//        mSpeechRecognizer.stopListening();
         Handler handlerP = new Handler(new Handler.Callback() {
             @Override
             public boolean handleMessage(Message msg) {
@@ -1158,13 +1164,13 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         public void onEvent(int eventType, Bundle params) {
             Log.d(TAG, "Recognition Listener onEvent " + eventType + " and " + params.toString());
         }
-    }
+    }*/
 
     /**
      * This starts the voice recognition library implemented using pocketsphinx
      */
 
-   /* private static final String KWS_SEARCH = "wakeup";
+    private static final String KWS_SEARCH = "wakeup";
     private static final String MENU_SEARCH = "menu";
     private static final String KEYPHRASE = "switch to";
 
@@ -1177,9 +1183,9 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 //    private static final String KWS_QUIT = "quit";
 
 
-    private static SpeechRecognizer recognizer;*/
+    private static SpeechRecognizer recognizer;
 
-   /* public void startRecognition() {
+    public void startRecognition() {
 
         new AsyncTask<Void, Void, Exception>() {
             @Override
@@ -1198,7 +1204,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             protected void onPostExecute(Exception result) {
                 if (result != null) {
 //                    Toast.makeText(Game.this, "Failed to make recognizer:" + result, Toast.LENGTH_LONG).show();
-                    Log.i(TAG, "Failed to make recognizer: " + result.toString());
+                    Log.i(TAG2, "Failed to make recognizer: " + result.toString());
                 } else {
                     switchSearch(KWS_SEARCH);
                 }
@@ -1208,18 +1214,21 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     @Override
     public void onResult(Hypothesis hypothesis) {
-        Log.i(TAG, "onResult");
+        Log.i(TAG2, "onResult");
         if (hypothesis != null) {
-            Log.i(TAG, "onResult: " + hypothesis.getHypstr());
             String text = hypothesis.getHypstr();
+            Log.i(TAG2, "onResult: " + text);
             if (text.equals(KWS_SAGITTAL)) {
-                Log.i(TAG, "press Q");
-                onKeyDown(KeyEvent.KEYCODE_Q, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Q));
-            } else if (text.equals(KWS_AXIAL)) {
+                Log.i(TAG2, "press W");
                 onKeyDown(KeyEvent.KEYCODE_W, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_W));
+            } else if (text.equals(KWS_AXIAL)) {
+                Log.i(TAG2, "press Q");
+                onKeyDown(KeyEvent.KEYCODE_Q, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Q));
             } else if (text.equals(KWS_CORONAL)) {
+                Log.i(TAG2, "press E");
                 onKeyDown(KeyEvent.KEYCODE_E, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_E));
             } else if (text.equals(KWS_FULL)) {
+                Log.i(TAG2, "press R");
                 onKeyDown(KeyEvent.KEYCODE_R, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_R));
             }
 //            else if(text.equals(KWS_EXIT) || text.equals(KWS_QUIT)) {
@@ -1233,6 +1242,16 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     }
 
     @Override
+    public void onError(Exception e) {
+        Log.i(TAG2, "PocketSphinx/onError: " + e.getMessage());
+    }
+
+    @Override
+    public void onTimeout() {
+        Log.i(TAG2, "PocketSphinx/onTimeout: ");
+    }
+
+    @Override
     protected void onPause() {
         if(recognizer != null){
             recognizer.stop();
@@ -1243,37 +1262,40 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     @Override
     public void onBeginningOfSpeech() {
-        Log.i(TAG,"onBeginningOfSpeech()");
+        Log.i(TAG2,"onBeginningOfSpeech()");
     }
 
     @Override
     public void onEndOfSpeech() {
-        Log.i(TAG, "onEndOfSpeech()");
+        Log.i(TAG2, "onEndOfSpeech()");
         if (MENU_SEARCH.equals(recognizer.getSearchName()))
             switchSearch(KWS_SEARCH);
     }
 
     @Override
     public void onPartialResult(Hypothesis hypothesis) {
-        Log.i(TAG,"onPartialResult()");
-        String text = hypothesis.getHypstr();
-        if (hypothesis.getHypstr().equals(KEYPHRASE)) {
-            switchSearch(MENU_SEARCH);
-        } else if (hypothesis.getHypstr().equals(MENU_SEARCH)){
-            if (text.equals(KWS_SAGITTAL)) {
-                onKeyDown(KeyEvent.KEYCODE_Q, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Q));
-            } else if (text.equals(KWS_AXIAL)) {
-                onKeyDown(KeyEvent.KEYCODE_W, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_W));
-            } else if (text.equals(KWS_CORONAL)) {
-                onKeyDown(KeyEvent.KEYCODE_E, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_E));
-            } else if (text.equals(KWS_FULL)) {
-                onKeyDown(KeyEvent.KEYCODE_R, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_R));
+        Log.i(TAG2,"onPartialResult()");
+        if(hypothesis != null) {
+            String text = hypothesis.getHypstr();
+            Log.i(TAG2, "onPartialResult: " + text);
+            if (text.equals(KEYPHRASE)) {
+                switchSearch(MENU_SEARCH);
+            } else if (text.equals(MENU_SEARCH)) {
+                if (text.equals(KWS_SAGITTAL)) {
+                    onKeyDown(KeyEvent.KEYCODE_Q, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Q));
+                } else if (text.equals(KWS_AXIAL)) {
+                    onKeyDown(KeyEvent.KEYCODE_W, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_W));
+                } else if (text.equals(KWS_CORONAL)) {
+                    onKeyDown(KeyEvent.KEYCODE_E, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_E));
+                } else if (text.equals(KWS_FULL)) {
+                    onKeyDown(KeyEvent.KEYCODE_R, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_R));
+                }
             }
         }
     }
 
     private void switchSearch(String searchName) {
-        Log.i(TAG, "switchSearch");
+        Log.i(TAG2, "switchSearch");
         if(recognizer != null){
             recognizer.stop();
             recognizer.startListening(searchName);
@@ -1283,11 +1305,15 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private void setupRecognizer(File assetsDir) {
         File modelsDir = new File(assetsDir, "models");
         float error = 1e-20f;
-        recognizer = defaultSetup()
-                .setAcousticModel(new File(modelsDir, "hmm/en-us-semi"))
-                .setDictionary(new File(modelsDir, "dict/cmu07a.dic"))
-                .setRawLogDir(assetsDir).setKeywordThreshold(error)
-                .getRecognizer();
+        try {
+            recognizer = defaultSetup()
+                    .setAcousticModel(new File(modelsDir, "hmm/en-us-semi"))
+                    .setDictionary(new File(modelsDir, "dict/cmu07a.dic"))
+                    .setRawLogDir(assetsDir).setKeywordThreshold(error)
+                    .getRecognizer();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         recognizer.addListener(this);
 
         // Create keyword-activation search.
@@ -1295,7 +1321,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
         // Create grammar-based searches.
         File menuGrammar = new File(modelsDir, "grammar/menu.gram");
+        File digitsGrammar = new File(modelsDir, "grammar/digits.gram");
         recognizer.addGrammarSearch(MENU_SEARCH, menuGrammar);
-    }*/
+
+        recognizer.addGrammarSearch(MENU_SEARCH, digitsGrammar);
+    }
 
 }

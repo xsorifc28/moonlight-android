@@ -60,14 +60,14 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
     public final static String NAME_EXTRA = "Name";
     public final static String UUID_EXTRA = "UUID";
 
-    private Handler mHandler;
-    private Runnable runnable = new Runnable() {
+    private Handler firstAppHandler;
+    private Runnable startFirstAppRunnable = new Runnable() {
         public void run() {
             int sz = appGridAdapter.getCount();
 //                Toast.makeText(getApplicationContext(), "App List Size: " + String.valueOf(sz), Toast.LENGTH_SHORT).show();
             if (sz == 0) {
 //                Toast.makeText(getApplicationContext(), "No App in list. Please verify on Computer.", Toast.LENGTH_LONG).show();
-                mHandler.postDelayed(runnable, 3000);
+                firstAppHandler.postDelayed(startFirstAppRunnable, 3000);
             } else {
                 AppObject app = (AppObject) appGridAdapter.getItem(0);
                 ServerHelper.doStart(AppView.this, app.app, computer, managerBinder);
@@ -96,22 +96,10 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
     // Added by Dillon and Samed
     public void startFirstApp() {
         if(appGridAdapter != null && appGridAdapter.getCount() > 0){
-            AppObject app = (AppObject) appGridAdapter.getItem(0);
-            ServerHelper.doQuit(AppView.this,
-                    ServerHelper.getCurrentAddressFromComputer(computer),
-                    app.app, managerBinder, new Runnable() {
-                        @Override
-                        public void run() {
-                            // Trigger a poll immediately
-                            suspendGridUpdates = false;
-                            if (poller != null) {
-                                poller.pollNow();
-                            }
-                        }
-                    });
+            doQuit();
         }
-        mHandler = new Handler();
-        mHandler.postDelayed(runnable, 3000);
+        firstAppHandler = new Handler();
+        firstAppHandler.postDelayed(startFirstAppRunnable, 3000);
     }
 
     public void exitApp(){
@@ -317,15 +305,36 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
         // Added by Dillon and Samed
         if(!manualQuit) {
             startFirstApp();
+        } else {
+            doQuit();
         }
 
         //startComputerUpdates();
     }
 
+    private void doQuit() {
+        int runningAppId = getRunningAppId();
+        if(runningAppId != -1) {
+            AppObject app = (AppObject) appGridAdapter.getItem(0);
+            ServerHelper.doQuit(AppView.this,
+                    ServerHelper.getCurrentAddressFromComputer(computer),
+                    app.app, managerBinder, new Runnable() {
+                        @Override
+                        public void run() {
+                            // Trigger a poll immediately
+                            suspendGridUpdates = false;
+                            if (poller != null) {
+                                poller.pollNow();
+                            }
+                        }
+                    });
+        }
+    }
+
     @Override
     protected void onPause() {
         super.onPause();
-        mHandler.removeCallbacks(runnable);
+        firstAppHandler.removeCallbacks(startFirstAppRunnable);
         stopComputerUpdates();
     }
 
