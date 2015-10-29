@@ -94,7 +94,7 @@ dependencies {
     compile files('libs/tinyrtsp.jar')
 
     // PocketSphinx
-    compile files('libs/pocketsphinx-android-0.8-nolib.jar')
+    compile files('libs/pocketsphinx-android-5prealpha-nolib.jar')
 
     compile fileTree(dir: 'libs', include: '*.jar')
 
