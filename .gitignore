@@ -32,4 +32,6 @@ Thumbs.db
 build/
 
 # Compiled JNI libraries folder
+app/src/main/jniLibs
 *.iml
+
