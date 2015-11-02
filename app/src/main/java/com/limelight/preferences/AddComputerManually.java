@@ -17,7 +17,6 @@ import com.limelight.utils.UiHelper;
 import android.app.Activity;
 import android.app.Service;
 import android.content.ComponentName;
-import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.res.Configuration;
@@ -27,9 +26,7 @@ import android.os.IBinder;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
-import android.view.KeyEvent;
 import android.view.inputmethod.EditorInfo;
-import android.view.inputmethod.InputMethodManager;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -45,8 +42,6 @@ public class AddComputerManually extends Activity implements RecognitionListener
 
     private static final String TAG = "AddComputerManually";
     private static final String TAG2 = TAG + "-Spx";
-
-    private static String IP = "";
 
     //private static String IP = "10.0.1.16";
 
@@ -172,7 +167,8 @@ public class AddComputerManually extends Activity implements RecognitionListener
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Start pocket-sphinx
+        // Start pocket-sphinx if IP is not manually added.
+        String IP = "";
         if(!IP.equals("")) {
             computersToAdd.add(IP);
         } else {
@@ -239,7 +235,6 @@ public class AddComputerManually extends Activity implements RecognitionListener
 
     // Pocket Sphinx enter ip
     private static final String KWS_START = "start";
-    private static final String KWS_CONFIRM = "confirm";
     private static final String DIGITS_SEARCH = "digits";
 
     private static final String KEYPHRASE = "add computer";
